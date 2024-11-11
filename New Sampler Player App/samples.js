@@ -20,6 +20,87 @@ export const samples = [
       description: 'A deep kick drum suitable for hip-hop beats.',
     },
     {
+      id: 'rimshot1',
+      name: 'Rimshot',
+      url: 'https://ordinals.com/content/83407a1c9637e53e76e3d4de711b971f557e7876ad96b9b520a8202109521ba1i5',
+      category: 'drum',
+      type: 'Snare',
+      properties: {
+        loop: false,
+        trim: false,
+        trimStart: 0,
+        trimEnd: 0, // Positive value -  will be removed from the end of the sample. EG 0.1 will remove the last 0.1 seconds of the sample.
+        volume: 1.0,
+        playbackRate: 1.0,
+        loopPoints: { bars: 0, beats: 0 },
+      },
+      note: null,
+      userNotes: 'Snare Rimshot.',
+      description: '',
+    },
+
+    {
+      id: 'floortom1',
+      name: 'Floor Tom 1',
+      url: 'https://ordinals.com/content/83407a1c9637e53e76e3d4de711b971f557e7876ad96b9b520a8202109521ba1i4',
+      category: 'drum',
+      type: 'Floortom',
+      properties: {
+        loop: false,
+        trim: false,
+        trimStart: 0,
+        trimEnd: 0, // Positive value -  will be removed from the end of the sample. EG 0.1 will remove the last 0.1 seconds of the sample.
+        volume: 1.0,
+        playbackRate: 1.0,
+        loopPoints: { bars: 0, beats: 0 },
+      },
+      note: null,
+      userNotes: 'Floor Tom.',
+      description: '',
+    },
+    {
+      id: 'floortom2',
+      name: 'Floor Tom 2',
+      url: 'https://ordinals.com/content/83407a1c9637e53e76e3d4de711b971f557e7876ad96b9b520a8202109521ba1i1',
+      category: 'drum',
+      type: 'Floortom',
+      properties: {
+        loop: false,
+        trim: false,
+        trimStart: 0,
+        trimEnd: 0, // Positive value -  will be removed from the end of the sample. EG 0.1 will remove the last 0.1 seconds of the sample.
+        volume: 1.0,
+        playbackRate: 1.0,
+        loopPoints: { bars: 0, beats: 0 },
+      },
+      note: null,
+      userNotes: 'Floor Tom.',
+      description: '',
+    },
+
+    {
+      id: 'highTom1',
+      name: 'High Tom 1',
+      url: 'https://ordinals.com/content/83407a1c9637e53e76e3d4de711b971f557e7876ad96b9b520a8202109521ba1i2',
+      category: 'drum',
+      type: 'highTom',
+      properties: {
+        loop: false,
+        trim: false,
+        trimStart: 0,
+        trimEnd: 0, // Positive value -  will be removed from the end of the sample. EG 0.1 will remove the last 0.1 seconds of the sample.
+        volume: 1.0,
+        playbackRate: 1.0,
+        loopPoints: { bars: 0, beats: 0 },
+      },
+      note: null,
+      userNotes: 'Floor Tom.',
+      description: '',
+    },
+
+
+    
+    {
       id: 'snare1',
       name: 'Snare Drum 1',
       url: 'https://ordinals.com/content/83407a1c9637e53e76e3d4de711b971f557e7876ad96b9b520a8202109521ba1i6',

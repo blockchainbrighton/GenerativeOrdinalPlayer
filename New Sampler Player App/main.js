@@ -1,4 +1,8 @@
 // main.js
+
+// Import the summary module to log the samples summary on load
+import './summary.js';
+
 import {
   playKick,
   playSnare,
