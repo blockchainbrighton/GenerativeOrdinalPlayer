@@ -11,7 +11,7 @@ import { audioContext, loadSample } from './audioLoader.js';
  * @returns {number} - Time in seconds.
  */
 function barsBeatsToSeconds(bars, beats, bpm, beatsPerBar = 4) {
-  const beatDuration = 60 / bpm; // Duration of one beat in seconds
+  const beatDuration = 60 / bpm;
   return (bars * beatsPerBar + beats) * beatDuration;
 }
 
@@ -23,6 +23,38 @@ function barsBeatsToSeconds(bars, beats, bpm, beatsPerBar = 4) {
  */
 export function getSample(category, type) {
   return samples.find(sample => sample.category === category && sample.type === type) || null;
+}
+
+/**
+ * Play a sample at a specific time.
+ * @param {string} category - The category of the sample.
+ * @param {string} type - The type of the sample.
+ * @param {number} time - The time in audioContext time to play the sample.
+ */
+export async function playSampleAtTime(category, type, time) {
+  const sample = getSample(category, type);
+  if (!sample) return;
+
+  const audioBuffer = await loadSample(sample);
+  if (!audioBuffer) return;
+
+  const source = audioContext.createBufferSource();
+  source.buffer = audioBuffer;
+
+  // Set playback rate
+  let playbackRate = sample.properties.playbackRate || 1.0;
+  source.playbackRate.value = playbackRate;
+
+  const gainNode = audioContext.createGain();
+  gainNode.gain.value = sample.properties.volume || 1.0;
+
+  source.connect(gainNode).connect(audioContext.destination);
+
+  // Handle trimming
+  const startOffset = sample.properties.trimStart || 0;
+  const duration = audioBuffer.duration - startOffset - (sample.properties.trimEnd || 0);
+
+  source.start(time, startOffset, duration);
 }
 
 /**
@@ -44,10 +76,10 @@ export async function playSample(sample, globalBpm = null) {
 
   source.connect(gainNode).connect(audioContext.destination);
 
-  // Set playback rate first
+  // Set playback rate
   let playbackRate = sample.properties.playbackRate || 1.0;
 
-  // Only adjust playback rate based on global BPM for looped samples
+  // Adjust playback rate based on global BPM for looped samples
   if (sample.properties.loop) {
     const sampleBpm = sample.properties.bpm || sample.tempo || 120;
     if (globalBpm && sampleBpm) {
@@ -79,20 +111,15 @@ export async function playSample(sample, globalBpm = null) {
       const sampleBpm = sample.properties.bpm;
       const beatsPerBar = sample.properties.timeSignature ? sample.properties.timeSignature[0] : 4;
 
-      // Calculate loop duration in seconds based on the sample's BPM
       const loopDuration = barsBeatsToSeconds(bars, beats, sampleBpm, beatsPerBar);
-
-      // Set loopEnd to loopStart plus the loopDuration
       loopEnd = loopStart + loopDuration;
 
-      // Ensure loopEnd does not exceed endOffset
       if (loopEnd > endOffset) {
         console.warn(`Calculated loop end (${loopEnd}s) exceeds buffer end (${endOffset}s). Adjusting loop end to buffer end.`);
         loopEnd = endOffset;
       }
     }
 
-    // Ensure loopEnd does not exceed audioBuffer duration
     if (loopEnd > audioBuffer.duration) {
       console.warn(`Loop end (${loopEnd}s) exceeds buffer duration (${audioBuffer.duration}s). Adjusting loop end to buffer end.`);
       loopEnd = audioBuffer.duration;
@@ -105,10 +132,8 @@ export async function playSample(sample, globalBpm = null) {
     console.log(`Playback Rate: ${playbackRate}`);
     console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 
-    // Start the source without specifying duration
     source.start(0, startOffset);
   } else {
-    // Start the source with specified duration
     source.start(0, startOffset, duration);
   }
 }
@@ -135,7 +160,7 @@ export async function playRandomSample(category, type, globalBpm = null) {
 
 /**
  * Example functions for playing specific types of samples.
- * These functions now accept an optional global BPM parameter.
+ * These functions accept an optional global BPM parameter.
  */
 export async function playKick(globalBpm = null) {
   await playRandomSample('drum', 'kick', globalBpm);
@@ -150,7 +175,7 @@ export async function playHiHat(globalBpm = null) {
 }
 
 export async function playTonalHit(globalBpm = null) {
-  await playRandomSample('tonal', 'instrument', globalBpm); // Adjust 'type' as needed
+  await playRandomSample('tonal', 'instrument', globalBpm);
 }
 
 export async function playRhythmLoop(globalBpm = null) {
