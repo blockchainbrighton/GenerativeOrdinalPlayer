@@ -12,13 +12,14 @@ const defaultConfig = {
   bars: 4,
   beatsPerBar: 4,
   swing: 0, // Swing amount (0 to 1)
+  fillProbability: 0.2, // Probability of a fill occurring at the end of a cycle
   instruments: {
-    kick: { enabled: true, probability: 0.9 },
-    snare: { enabled: true, probability: 0.8 },
-    hihat: { enabled: true, probability: 0.95, tempoVariants: [1, 2, 4] }, // Tempo variants for hihat
-    rimshot: { enabled: false, probability: 0.5 },
-    floortom: { enabled: true, probability: 0.3 },
-    hightom: { enabled: true, probability: 0.3 },
+    kick: { enabled: true, probability: 0.9, tempoVariants: [1, 2, 4] },
+    snare: { enabled: true, probability: 0.8, tempoVariants: [1, 2, 4] },
+    hihat: { enabled: true, probability: 0.95, tempoVariants: [1, 2, 4] },
+    rimshot: { enabled: false, probability: 0.5, tempoVariants: [1, 2, 4] },
+    floortom: { enabled: true, probability: 0.3, tempoVariants: [1, 2, 4] },
+    hightom: { enabled: true, probability: 0.3, tempoVariants: [1, 2, 4] },
     // Add other instruments as needed
   },
   patterns: patterns, // Use imported patterns
@@ -83,7 +84,7 @@ export class BeatGenerator {
   /**
    * Generates patterns for each instrument based on the configuration.
    */
-  generatePatterns() {
+  generatePatterns(isFill = false) {
     const {
       instruments,
       beatsPerBar,
@@ -130,7 +131,9 @@ export class BeatGenerator {
 
       // Select or generate base pattern at max resolution
       let basePattern = [];
-      const instrumentPatterns = importedPatterns[instrumentName] || [];
+      const instrumentPatterns = isFill
+        ? importedPatterns[`${instrumentName}_fills`] || []
+        : importedPatterns[instrumentName] || [];
 
       if (instrumentPatterns.length > 0) {
         basePattern = patternSelection
@@ -150,7 +153,7 @@ export class BeatGenerator {
           if (Math.random() > settings.probability) {
             pattern[i] = 0;
           }
-        } else if (hitVariation && Math.random() < 0.1) {
+        } else if (!isFill && hitVariation && Math.random() < 0.1) {
           pattern[i] = 1;
         }
       }
@@ -178,27 +181,40 @@ export class BeatGenerator {
    * @param {number} startTime - The time to start scheduling from.
    */
   scheduleBeat(startTime = audioContext.currentTime + 0.1) {
-    const { swing } = this.config;
+    const { swing, fillProbability } = this.config;
     const scheduledSounds = [];
     const uniqueSamples = new Set();
-
+  
+    // Keep track of cycles to trigger fills at specific times
+    if (this.cycleCount === undefined) {
+      this.cycleCount = 0;
+    }
+  
+    // Decide when to play a fill (e.g., every 4 cycles)
+    const playFill = this.cycleCount % 4 === 3; // Play a fill every 4 cycles (on the 4th)
+  
+    // Generate fill patterns if needed
+    if (playFill) {
+      this.generatePatterns(true); // Generate fill patterns
+    }
+  
     // Determine the maximum pattern length among all instruments
     const maxPatternLength = Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
-
+  
     for (const [instrumentName, pattern] of Object.entries(this.generatedPatterns)) {
       const stepDuration = this.instrumentStepDurations[instrumentName];
-
+  
       for (let i = 0; i < pattern.length; i++) {
         if (pattern[i] !== 1) continue;
-
+  
         let time = startTime + i * stepDuration;
-
+  
         // Apply swing to off-beats
         const isOffBeat = (i % 2) !== 0;
         if (swing > 0 && isOffBeat) {
           time += stepDuration * swing;
         }
-
+  
         const samplesList = getSamplesByType('drum', instrumentName);
         if (samplesList.length > 0) {
           const selectedSample = playRandomSampleAtTime(samplesList, time);
@@ -212,26 +228,31 @@ export class BeatGenerator {
           }
         }
       }
-
-      // Update tempo modifiers for the instrument
-      const settings = this.config.instruments[instrumentName];
-      const modifier = this.tempoModifiers[instrumentName];
-      if (settings.tempoVariants && modifier) {
-        modifier.stepsUntilChange -= 1;
-        if (modifier.stepsUntilChange <= 0) {
-          modifier.currentVariantIndex = (modifier.currentVariantIndex + 1) % settings.tempoVariants.length;
-          modifier.stepsUntilChange = this.randomTempoChangeFrequency();
-          // Regenerate the patterns with the new tempo variant
-          this.generatePatterns();
+  
+      // Update tempo modifiers for the instrument if not playing a fill
+      if (!playFill) {
+        const settings = this.config.instruments[instrumentName];
+        const modifier = this.tempoModifiers[instrumentName];
+        if (settings.tempoVariants && modifier) {
+          modifier.stepsUntilChange -= 1;
+          if (modifier.stepsUntilChange <= 0) {
+            modifier.currentVariantIndex = (modifier.currentVariantIndex + 1) % settings.tempoVariants.length;
+            modifier.stepsUntilChange = this.randomTempoChangeFrequency();
+            // Regenerate the patterns with the new tempo variant
+            this.generatePatterns();
+          }
         }
       }
     }
-
+  
+    // Increment cycle count after scheduling
+    this.cycleCount += 1;
+  
     // Condensed Log: List of unique samples used in this loop
     if (uniqueSamples.size > 0) {
       console.log('Samples Used:', Array.from(uniqueSamples).join(', '));
     }
-
+  
     // Detailed Log: Selection of sounds for this beat
     if (scheduledSounds.length > 0) {
       console.log('Beat Update:', scheduledSounds);
