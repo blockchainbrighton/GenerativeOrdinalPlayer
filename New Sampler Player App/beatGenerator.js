@@ -92,20 +92,6 @@ export class BeatGenerator {
     }
   }
 
-  /**
-   * Generates patterns for each instrument based on the current configuration.
-   * @param {boolean} isFill - Indicates if generating a fill pattern.
-   */
-  generatePatterns(isFill = false) {
-    this.generatedPatterns = {};
-    for (const [instrument, settings] of Object.entries(this.config.instruments)) {
-      if (!settings.enabled) continue;
-      const pattern = isFill
-        ? this.config.patterns.fillPatterns[instrument] || [0, 0, 0, 0]
-        : this.config.patterns.standardPatterns[instrument] || [0, 0, 0, 0];
-      this.generatedPatterns[instrument] = pattern;
-    }
-  }
 
   /**
    * Schedules a beat based on the generated patterns.
@@ -227,90 +213,95 @@ export class BeatGenerator {
    * @returns {number} - Steps until the next tempo change.
    */
   randomTempoChangeFrequency() {
-    return Math.floor(Math.random() * 5) + 1; // Random between 1 and 5
+    if (!this._tempoChangeFrequency) {
+      this._tempoChangeFrequency = Math.floor(Math.random() * 5) + 1; // Random between 1 and 5
+    }
+    return this._tempoChangeFrequency;
   }
 
 
   /**
-   * Generates patterns for each instrument based on the configuration.
-   */
-  generatePatterns(isFill = false) {
-    const {
-      instruments,
-      beatsPerBar,
-      bars,
-      randomness: { patternSelection, hitVariation },
-      patterns: importedPatterns,
-      bpm,
-    } = this.config;
+ * Generates patterns for each instrument based on the configuration.
+ * @param {boolean} isFill - Indicates if generating a fill pattern.
+ */
+generatePatterns(isFill = false) {
+  const {
+    instruments,
+    beatsPerBar,
+    bars,
+    randomness: { patternSelection, hitVariation },
+    patterns: importedPatterns,
+    bpm,
+  } = this.config;
 
-    this.beatDuration = 60 / bpm;
-    this.totalDuration = this.beatDuration * beatsPerBar * bars;
+  this.beatDuration = 60 / bpm;
+  this.totalDuration = this.beatDuration * beatsPerBar * bars;
 
-    // Determine the highest tempo multiplier among all instruments
-    const maxTempoMultiplier = Math.max(
-      ...Object.values(instruments).map((settings) =>
-        settings.tempoVariants ? Math.max(...settings.tempoVariants) : 1
-      )
-    );
+  // Determine the highest tempo multiplier among all instruments
+  const maxTempoMultiplier = Math.max(
+    ...Object.values(instruments).map((settings) =>
+      settings.tempoVariants ? Math.max(...settings.tempoVariants) : 1
+    )
+  );
 
-    // The highest resolution is the base for all patterns
-    const maxResolution = beatsPerBar * bars * maxTempoMultiplier;
+  // The highest resolution is the base for all patterns
+  const maxResolution = beatsPerBar * bars * maxTempoMultiplier;
 
-    // The base step duration for the highest resolution
-    this.baseStepDuration = this.totalDuration / maxResolution;
+  // The base step duration for the highest resolution
+  this.baseStepDuration = this.totalDuration / maxResolution;
 
-    this.generatedPatterns = {};
-    this.instrumentStepDurations = {}; // Store per-instrument step durations
+  this.generatedPatterns = {};
+  this.instrumentStepDurations = {}; // Store per-instrument step durations
 
-    for (const [instrumentName, settings] of Object.entries(instruments)) {
-      if (!settings.enabled) continue;
+  for (const [instrumentName, settings] of Object.entries(instruments)) {
+    if (!settings.enabled) continue;
 
-      // Determine current tempo multiplier
-      let tempoMultiplier = 1;
-      if (settings.tempoVariants && settings.tempoVariants.length > 0) {
-        const modifier = this.tempoModifiers[instrumentName];
-        if (modifier) {
-          tempoMultiplier = settings.tempoVariants[modifier.currentVariantIndex];
-        }
+    // Determine current tempo multiplier
+    let tempoMultiplier = 1;
+    if (settings.tempoVariants && settings.tempoVariants.length > 0) {
+      const modifier = this.tempoModifiers[instrumentName];
+      if (modifier) {
+        tempoMultiplier = settings.tempoVariants[modifier.currentVariantIndex];
       }
-
-      // Calculate step duration for this instrument
-      const stepDuration = this.baseStepDuration / (tempoMultiplier / maxTempoMultiplier);
-      this.instrumentStepDurations[instrumentName] = stepDuration;
-
-      // Select or generate base pattern at max resolution
-      let basePattern = [];
-      const instrumentPatterns = isFill
-        ? importedPatterns[`${instrumentName}_fills`] || []
-        : importedPatterns[instrumentName] || [];
-
-      if (instrumentPatterns.length > 0) {
-        basePattern = patternSelection
-          ? instrumentPatterns[Math.floor(Math.random() * instrumentPatterns.length)]
-          : instrumentPatterns[0];
-      } else {
-        // Default to a pattern with hits on every step
-        basePattern = Array(maxResolution).fill(1);
-      }
-
-      // Downsample the base pattern according to tempoMultiplier
-      const pattern = this.downsamplePattern(basePattern, maxTempoMultiplier / tempoMultiplier);
-
-      // Apply probability and hit variation
-      for (let i = 0; i < pattern.length; i++) {
-        if (pattern[i] === 1) {
-          if (Math.random() > settings.probability) {
-            pattern[i] = 0;
-          }
-        } else if (!isFill && hitVariation && Math.random() < 0.1) {
-          pattern[i] = 1;
-        }
-      }
-
-      this.generatedPatterns[instrumentName] = pattern;
     }
+
+    // Calculate step duration for this instrument
+    const stepDuration = this.baseStepDuration / (tempoMultiplier / maxTempoMultiplier);
+    this.instrumentStepDurations[instrumentName] = stepDuration;
+
+    // Select or generate base pattern at max resolution
+    let basePattern = [];
+    const instrumentPatterns = isFill
+      ? importedPatterns[`${instrumentName}_fills`] || []
+      : importedPatterns[instrumentName] || [];
+
+    if (instrumentPatterns.length > 0) {
+      basePattern = patternSelection
+        ? instrumentPatterns[Math.floor(Math.random() * instrumentPatterns.length)]
+        : instrumentPatterns[0];
+    } else {
+      // Default to a pattern with hits on every step
+      basePattern = Array(maxResolution).fill(1);
+    }
+
+    // Downsample the base pattern according to tempoMultiplier
+    const pattern = this.downsamplePattern(basePattern, maxTempoMultiplier / tempoMultiplier);
+
+    // Apply probability and hit variation
+    for (let i = 0; i < pattern.length; i++) {
+      if (pattern[i] === 1) {
+        if (Math.random() > settings.probability) {
+          pattern[i] = 0;
+        }
+      } else if (!isFill && hitVariation && Math.random() < 0.1) {
+        pattern[i] = 1;
+      }
+    }
+
+    this.generatedPatterns[instrumentName] = pattern;
   }
+}
+
 
   /**
    * Downsamples a pattern by a given factor.

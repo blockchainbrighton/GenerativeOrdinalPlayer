@@ -30,6 +30,9 @@ let beatGenerator = null;
 let nextNoteTime = 0.0;
 let schedulerTimer = null;
 let barCount = 0;
+let secondsPerBeat = 60 / currentBpm;
+
+
 
 // Playback State
 const playbackState = {
@@ -61,11 +64,12 @@ const toggleClass = (element, className, condition) => {
 };
 
 // Initialize playbackState.loops with all loop samples, defaulting to inactive
-Object.keys(summaryData.instrumentsByCategory).forEach(category => {
-  summaryData.instrumentsByCategory[category].forEach(loopId => {
-    playbackState.loops[loopId] = false;
-  });
-});
+playbackState.loops = Object.fromEntries(
+  Object.values(summaryData.instrumentsByCategory)
+    .flat()
+    .map(loopId => [loopId, false])
+);
+
 
 // Initialize AudioContext on user interaction
 document.body.addEventListener(
@@ -75,30 +79,29 @@ document.body.addEventListener(
 );
 
 // Dynamically generate instrument play functions
-const instrumentPlayFunctions = Object.entries(summaryData.instrumentsByCategory)
-  .flatMap(([category, instruments]) =>
-    instruments.map(instrument => ({
-      instrument,
-      category
-    }))
-  )
-  .reduce((acc, { instrument, category }) => {
-    acc[instrument] = () => {
-      const startTime = getNextBeatStartTime();
-      playRandomSample(category, instrument, currentBpm, startTime);
-    };
-    return acc;
-  }, {});
+const instrumentPlayFunctions = Object.fromEntries(
+  Object.entries(summaryData.instrumentsByCategory)
+    .flatMap(([category, instruments]) =>
+      instruments.map(instrument => [
+        instrument,
+        () => {
+          const startTime = getNextBeatStartTime();
+          playRandomSample(category, instrument, currentBpm, startTime);
+        },
+      ])
+    )
+);
+
 
 // Timing Functions
 const getNextBeatStartTime = () => {
   const now = audioContext.currentTime;
   const globalStart = getGlobalStartTime();
-  const secondsPerBeat = 60 / currentBpm;
   const elapsedBeats = Math.floor((now - globalStart) / secondsPerBeat);
   const nextBeat = globalStart + (elapsedBeats + 1) * secondsPerBeat;
   return nextBeat > now ? nextBeat : now + secondsPerBeat;
 };
+
 
 const getNextLoopStartTime = () => {
   const currentTime = audioContext.currentTime;
@@ -275,37 +278,36 @@ const stopSource = (loopId) => {
   }
 };
 
-/**
- * Toggles the Beat Generator on or off.
- */
+const calculateBars = () => {
+  const activeLoopKeys = Object.keys(playbackState.loops).filter(
+    (key) => playbackState.loops[key]
+  );
+  if (activeLoopKeys.length === 0) return 4;
+
+  return Math.max(
+    ...activeLoopKeys.map((loopId) => {
+      const category = loopId === 'rhythmLoop' ? 'percussionLoop' : 'melodicLoop';
+      const type = loopId === 'rhythmLoop' ? 'rhythm' : 'melody';
+      const sample = getSample(category, type);
+      return sample?.properties?.loopBars || 4;
+    })
+  );
+};
+
 const toggleBeat = () => {
   playbackState.beat = !playbackState.beat;
   toggleClass(getElement('generateBeat'), 'active', playbackState.beat);
 
   if (playbackState.beat) {
-    if (beatGenerator && beatGenerator.isPlaying) {
+    if (beatGenerator?.isPlaying) {
       console.warn('BeatGenerator is already running.');
       return;
     }
 
-    // Determine the number of bars based on active loops
-    const activeLoopKeys = Object.keys(playbackState.loops).filter(
-      (key) => playbackState.loops[key]
-    );
-    const bars = activeLoopKeys.length
-      ? Math.max(
-          ...activeLoopKeys.map((loopId) => {
-            const sample = getSample(loopId === 'rhythmLoop' ? 'percussionLoop' : 'melodicLoop', loopId === 'rhythmLoop' ? 'rhythm' : 'melody');
-            return sample?.properties?.loopBars || 4;
-          })
-        )
-      : 4;
-
-    beatConfig = { ...beatConfig, bars };
+    beatConfig = { ...beatConfig, bars: calculateBars() };
 
     // Initialize BeatGenerator
     beatGenerator = new BeatGenerator(beatConfig);
-    // Pass loopTimings to Beat Generator
     beatGenerator.setLoopDuration(loopTimings);
 
     if (!schedulerTimer) {
@@ -316,10 +318,9 @@ const toggleBeat = () => {
     console.log(`Scheduling Beat Generator to start at ${nextStart.toFixed(3)} seconds.`);
     beatGenerator.start(nextStart);
   } else {
-    if (beatGenerator) {
-      beatGenerator.stop();
-      beatGenerator = null;
-    }
+    beatGenerator?.stop();
+    beatGenerator = null;
+
     if (!Object.values(playbackState.loops).some(Boolean)) {
       stopScheduler();
     }
@@ -335,6 +336,7 @@ const setBpm = () => {
     return;
   }
   currentBpm = bpmInput;
+  secondsPerBeat = 60 / currentBpm;
   alert(`BPM set to ${currentBpm}`);
 
   // Update BeatGenerator's BPM if active
@@ -357,18 +359,19 @@ const setBpm = () => {
 };
 
 const setVolume = (value) => {
-  masterGainNode.gain.value = parseFloat(value) || 1.0;
+  masterGainNode.gain.value = parseFloat(value) ?? 1.0;
 };
 
+
 const applySettings = () => {
-  const instruments = summaryData.instrumentsByCategory.flatMap(([_, instruments]) => instruments);
+  const instruments = Object.values(summaryData.instrumentsByCategory).flat();
   const uniqueInstruments = [...new Set(instruments)];
 
   const updatedInstruments = uniqueInstruments.reduce((acc, name) => {
     const capitalized = capitalize(name);
     acc[name] = {
-      enabled: getElement(`enable${capitalized}`)?.checked || false,
-      probability: parseFloat(getElement(`${name.toLowerCase()}Probability`)?.value) || 0,
+      enabled: getElement(`enable${capitalized}`)?.checked ?? false,
+      probability: parseFloat(getElement(`${name.toLowerCase()}Probability`)?.value) ?? 0,
       tempoVariants:
         beatConfig.instruments[name]?.tempoVariants ||
         defaultConfig.instruments[name]?.tempoVariants ||
@@ -401,11 +404,22 @@ const applySettings = () => {
 };
 
 // Event Listeners
-document.body.addEventListener('click', (event) => {
-  const { target } = event;
+const idActionMap = {
+  generateBeat: toggleBeat,
+  applySettings: applySettings,
+  setBpm: setBpm,
+};
+
+document.body.addEventListener('click', ({ target }) => {
+  const { id } = target;
+
+  if (idActionMap[id]) {
+    idActionMap[id]();
+    return;
+  }
 
   // Handle Loop Buttons
-  const loopMatch = target.id.match(/^play(.*)Loop$/);
+  const loopMatch = id.match(/^play(.*)Loop$/);
   if (loopMatch) {
     const loopType = loopMatch[1].toLowerCase();
     const sourceKey = `${loopType}Loop`;
@@ -414,30 +428,13 @@ document.body.addEventListener('click', (event) => {
   }
 
   // Handle Play Instrument Buttons
-  if (target.id.startsWith('play') && !target.id.endsWith('Loop')) {
-    const instrumentName = target.id.replace(/^play/i, '').toLowerCase();
+  if (id.startsWith('play') && !id.endsWith('Loop')) {
+    const instrumentName = id.replace(/^play/i, '').toLowerCase();
     instrumentPlayFunctions[instrumentName]?.();
     return;
   }
-
-  // Handle Generate Beat Button
-  if (target.id === 'generateBeat') {
-    toggleBeat();
-    return;
-  }
-
-  // Handle Apply Settings Button
-  if (target.id === 'applySettings') {
-    applySettings();
-    return;
-  }
-
-  // Handle Set BPM Button
-  if (target.id === 'setBpm') {
-    setBpm();
-    return;
-  }
 });
+
 
 // Volume Slider Event Listener
 getElement('volumeSlider')?.addEventListener('input', (e) => {
@@ -525,3 +522,52 @@ The `main.js` file integrates the various components responsible for audio playb
 
 This module serves as the central controller for orchestrating audio loops, beats, and user interactions, making it a crucial part of any web-based music creation or sequencing project.
  */
+
+
+
+
+
+
+/** Condensed dev notes for main.js for AI assistants: 
+ * ### Condensed Version for AI Assistant (main.js)
+
+**`main.js` Summary:**
+Handles audio playback, beat generation, loop management, and user interaction in a web-based music system.
+
+**Key Features:**
+- **Beat Generation**: `BeatGenerator` schedules beats based on user config, BPM, and randomness.
+- **Loop Management**: Controls multiple loops (e.g., rhythm, melody) using dynamic functions.
+- **Audio Context**: Manages `AudioContext` for playback.
+- **User Controls**: Interface for adjusting BPM, volume, toggling loops, and controlling beat settings.
+- **Scheduling**: Ensures loops and beats play in sync with the correct timing.
+- **State Management**: Tracks loop and beat states for accurate playback.
+
+**Core Functions:**
+- **`capitalize(str)`**: Capitalizes the first letter.
+- **`getElement(id)`**: Retrieves an HTML element by `id`.
+- **`toggleClass(element, className, condition)`**: Toggles a class based on a condition.
+- **`getNextBeatStartTime()`, `getNextLoopStartTime()`**: Calculates start times for beats/loops.
+- **`scheduler()`, `startScheduler()`, `stopScheduler()`**: Controls the loop/beat scheduling.
+- **`toggleLoop(sourceKey)`, `scheduleLoop(category, type, time, sourceKey)`**: Manages and schedules loops.
+- **`stopSource(loopId)`**: Stops a specific loop.
+- **`toggleBeat()`, `setBpm()`, `setVolume(value)`**: Toggles beat generator, sets BPM, adjusts volume.
+- **`applySettings()`**: Applies beat generator settings.
+
+**UI Events:**
+- **Click & Volume Slider Events**: Handle UI interactions for loops, beats, BPM, and volume.
+
+**Developer Notes:**
+- **Beat Generator**: Controlled via `toggleBeat()`; customizable via `beatConfig`.
+- **Loop Control**: Managed by `toggleLoop()` and `scheduleLoop()` for dynamic playback.
+- **Audio Context**: Initialized via user click to comply with autoplay restrictions.
+- **UI Integration**: Can be linked with UI elements for real-time adjustments.
+- **Sample Loading**: Uses `loadSample()` and `scheduleLoop()` for dynamic sample playback.
+
+**Dependencies:**
+- **Audio Loader**: `audioContext`, `masterGainNode`, `loadSample`, etc., for audio management.
+- **Beat Generator**: `BeatGenerator`, `defaultConfig` for beat timing.
+- **Sample List**: `samples` for available audio samples.
+- **Summary Data**: `summaryData` for managing play functions and loop states.
+
+This module is essential for orchestrating web-based music systems, providing real-time control over audio loops, beats, and playback settings.
+*/
