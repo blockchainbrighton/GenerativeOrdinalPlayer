@@ -2,10 +2,9 @@
 
 // Import necessary modules
 import './summary.js'; // Ensures summary is generated
-// uiGenerator.js is already imported in index.html
-
 import {
   playSampleAtTime,
+  getSample, // Assuming getSample is exported from player.js or relevant module
 } from './player.js';
 import { audioContext, masterGainNode, loadSample } from './audioLoader.js';
 import { BeatGenerator } from './beatGenerator.js';
@@ -13,7 +12,50 @@ import { summaryData } from './summary.js'; // Import summary data for dynamic h
 
 let beatGeneratorInstance = null;
 
-// Ensure the user interacts with the page before audio can be played
+// Scheduler constants
+const CURRENT_BPM_DEFAULT = 137;
+let currentBpm = CURRENT_BPM_DEFAULT;
+
+const SCHEDULER_CONFIG = {
+  scheduleAheadTime: 0.1, // seconds
+  lookahead: 25.0, // milliseconds
+};
+
+let nextNoteTime = 0.0;
+let timerID = null;
+
+// Playback state management
+const playbackState = {
+  beat: false,
+  loops: {
+    rhythmLoop: false,
+    melodyLoop: false,
+  },
+};
+
+// Active audio sources
+const activeSources = new Map();
+
+// Beat generator configuration
+let beatGeneratorConfig = {
+  bpm: currentBpm,
+  instruments: {},
+  randomness: {},
+  swing: 0,
+  bars: 4,
+  beatsPerBar: 4,
+};
+
+// Utility functions
+const capitalize = (str) => str.charAt(0).toUpperCase() + str.slice(1);
+
+const getElement = (id) => document.getElementById(id);
+
+const toggleClass = (element, className, condition) => {
+  if (element) element.classList.toggle(className, condition);
+};
+
+// Initialize AudioContext on user interaction
 document.body.addEventListener(
   'click',
   () => {
@@ -24,64 +66,37 @@ document.body.addEventListener(
   { once: true }
 );
 
-// Current BPM (default)
-let currentBpm = 137;
-
-// Scheduler variables
-let isBeatPlaying = false;
-let isRhythmLoopPlaying = false;
-let isMelodyLoopPlaying = false;
-
-let nextNoteTime = 0.0; // When the next note is due
-const scheduleAheadTime = 0.1; // How far ahead to schedule audio (sec)
-const lookahead = 25.0; // How frequently to call scheduling function (ms)
-
-let timerID = null;
-
-// Map to hold currently playing sources for loops
-const activeSources = new Map();
-
-// Object to store loop info
-const loopInfo = {
-  rhythmLoop: null,
-  melodyLoop: null,
-};
-
-// Mapping of instrument names to their play functions
-// Ensure this mapping includes all possible instruments
-const instrumentPlayFunctions = {
-  kick: () => playSampleAtTime('Drums', 'kick', currentBpm),
-  snare: () => playSampleAtTime('Drums', 'snare', currentBpm),
-  hihat: () => playSampleAtTime('Drums', 'hihat', currentBpm),
-  rimshot: () => playSampleAtTime('Tonal Hits', 'rimshot', currentBpm),
-  floortom: () => playSampleAtTime('Tonal Hits', 'floortom', currentBpm),
-  hightom: () => playSampleAtTime('Tonal Hits', 'hightom', currentBpm),
-  // Add more mappings as needed
-};
+// Dynamically generate instrument play functions
+const instrumentPlayFunctions = Object.entries(summaryData.instrumentsByCategory).reduce(
+  (acc, [category, instruments]) => {
+    instruments.forEach((instrument) => {
+      acc[instrument] = () => playSampleAtTime(category, instrument, currentBpm);
+    });
+    return acc;
+  },
+  {}
+);
 
 // Scheduler function
 const scheduler = () => {
-  while (nextNoteTime < audioContext.currentTime + scheduleAheadTime) {
-    if (isBeatPlaying && beatGeneratorInstance) {
-      // Schedule the beat patterns starting from nextNoteTime
+  while (nextNoteTime < audioContext.currentTime + SCHEDULER_CONFIG.scheduleAheadTime) {
+    if (playbackState.beat && beatGeneratorInstance) {
       beatGeneratorInstance.scheduleBeat(nextNoteTime);
-      // Increment nextNoteTime by the total duration of the patterns
       const patternDuration = (60 / currentBpm) * beatGeneratorInstance.getPatternLength();
       nextNoteTime += patternDuration;
     }
 
-    if (isRhythmLoopPlaying) {
-      scheduleLoop('percussionLoop', 'rhythm', nextNoteTime, 'rhythmLoop');
-    }
-
-    if (isMelodyLoopPlaying) {
-      scheduleLoop('melodicLoop', 'melody', nextNoteTime, 'melodyLoop');
-    }
+    Object.keys(playbackState.loops).forEach((loopKey) => {
+      if (playbackState.loops[loopKey]) {
+        const [category, type] = loopKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
+        scheduleLoop(category, type, nextNoteTime, loopKey);
+      }
+    });
   }
-  timerID = setTimeout(scheduler, lookahead);
+  timerID = setTimeout(scheduler, SCHEDULER_CONFIG.lookahead);
 };
 
-// Start the scheduler
+// Scheduler control
 const startScheduler = () => {
   if (!timerID) {
     nextNoteTime = audioContext.currentTime + 0.1; // Slight delay to start
@@ -89,9 +104,8 @@ const startScheduler = () => {
   }
 };
 
-// Stop the scheduler if nothing is playing
 const stopScheduler = () => {
-  if (!isBeatPlaying && !isRhythmLoopPlaying && !isMelodyLoopPlaying) {
+  if (!playbackState.beat && !Object.values(playbackState.loops).some(Boolean)) {
     clearTimeout(timerID);
     timerID = null;
     activeSources.forEach((source) => source.stop());
@@ -99,25 +113,21 @@ const stopScheduler = () => {
   }
 };
 
-// Stop a specific source
+// Stop a specific audio source
 const stopSource = (sourceKey) => {
   const source = activeSources.get(sourceKey);
   if (source) {
     source.stop();
     activeSources.delete(sourceKey);
   }
-  // Clear loop info when stopping the source
-  loopInfo[sourceKey] = null;
 };
 
-// Toggle Beat
+// Toggle Beat Playback
 const toggleBeat = () => {
-  isBeatPlaying = !isBeatPlaying;
-  const button = document.getElementById('generateBeat');
-  button?.classList.toggle('active', isBeatPlaying);
+  playbackState.beat = !playbackState.beat;
+  toggleClass(getElement('generateBeat'), 'active', playbackState.beat);
 
-  if (isBeatPlaying) {
-    // Create a new BeatGenerator instance when starting the beat
+  if (playbackState.beat) {
     beatGeneratorInstance = new BeatGenerator({
       bpm: currentBpm,
       instruments: beatGeneratorConfig.instruments,
@@ -126,7 +136,6 @@ const toggleBeat = () => {
       bars: beatGeneratorConfig.bars,
       beatsPerBar: beatGeneratorConfig.beatsPerBar,
     });
-    // Reset nextNoteTime
     nextNoteTime = audioContext.currentTime + 0.1;
     startScheduler();
   } else {
@@ -134,32 +143,20 @@ const toggleBeat = () => {
   }
 };
 
-// Toggle Loop
+// Toggle Loop Playback
 const toggleLoop = (sourceKey, sampleCategory, type) => {
-  let isPlaying;
-  if (sourceKey === 'rhythmLoop') {
-    isPlaying = isRhythmLoopPlaying;
-  } else if (sourceKey === 'melodyLoop') {
-    isPlaying = isMelodyLoopPlaying;
-  }
+  playbackState.loops[sourceKey] = !playbackState.loops[sourceKey];
+  toggleClass(getElement(sourceKey === 'rhythmLoop' ? 'playRhythmLoop' : 'playMelodyLoop'), 'active', playbackState.loops[sourceKey]);
 
-  const buttonId = sourceKey === 'rhythmLoop' ? 'playRhythmLoop' : 'playMelodyLoop';
-  const button = document.getElementById(buttonId);
-
-  if (!isPlaying) {
-    if (sourceKey === 'rhythmLoop') isRhythmLoopPlaying = true;
-    if (sourceKey === 'melodyLoop') isMelodyLoopPlaying = true;
-    if (button) button.classList.add('active');
+  if (playbackState.loops[sourceKey]) {
     startScheduler();
   } else {
-    if (sourceKey === 'rhythmLoop') isRhythmLoopPlaying = false;
-    if (sourceKey === 'melodyLoop') isMelodyLoopPlaying = false;
-    if (button) button.classList.remove('active');
     stopSource(sourceKey);
+    stopScheduler();
   }
 };
 
-// Schedule a loop
+// Schedule a loop with adjusted loopEnd based on playbackRate
 const scheduleLoop = async (category, type, time, sourceKey) => {
   if (activeSources.has(sourceKey)) return; // Already scheduled
 
@@ -178,49 +175,43 @@ const scheduleLoop = async (category, type, time, sourceKey) => {
   source.connect(gainNode).connect(masterGainNode);
 
   // Set playback rate
-  let playbackRate = sample.properties.playbackRate || 1.0;
-  const sampleBpm = sample.properties.bpm || sample.tempo || 120;
-  if (currentBpm && sampleBpm) {
-    playbackRate *= currentBpm / sampleBpm;
-  }
+  const playbackRate = ((sample.properties.playbackRate || 1.0) * (currentBpm / (sample.properties.bpm || sample.tempo || 120))) || 1.0;
   source.playbackRate.value = playbackRate;
 
   // Handle trimming
-  const startOffset = sample.properties.trimStart || 0;
-  const endOffset = audioBuffer.duration - (sample.properties.trimEnd || 0);
+  const { trimStart = 0, trimEnd = 0 } = sample.properties;
 
-  // Handle looping
+  // Calculate adjusted loopEnd based on playbackRate
+  const originalLoopDuration = audioBuffer.duration - trimEnd - trimStart;
+  const adjustedLoopDuration = originalLoopDuration / playbackRate;
+  const adjustedLoopEnd = trimStart + adjustedLoopDuration;
+
   source.loop = true;
-  source.loopStart = startOffset;
-  source.loopEnd = endOffset;
+  source.loopStart = trimStart;
+  source.loopEnd = adjustedLoopEnd;
 
   // Start the source at the scheduled time
-  source.start(time, startOffset);
+  source.start(time, trimStart);
 
-  // Store the source so we can stop it later
+  // Store the source for later control
   activeSources.set(sourceKey, source);
 
-  // Store loop info
-  const loopDuration = (endOffset - startOffset) / playbackRate;
-  loopInfo[sourceKey] = {
-    startTime: time,
-    duration: loopDuration,
-  };
+  console.log(`Scheduled loop: ${sample.type} at time ${time.toFixed(3)} with playbackRate ${playbackRate}`);
+  console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 };
 
 // BPM Control
 const setBpm = () => {
-  const bpmInput = document.getElementById('bpmInput')?.value;
-  const bpm = parseInt(bpmInput, 10);
-  if (isNaN(bpm) || bpm <= 0) {
+  const bpmInput = parseInt(getElement('bpmInput')?.value, 10);
+  if (isNaN(bpmInput) || bpmInput <= 0) {
     alert('Please enter a valid BPM value.');
     return;
   }
-  currentBpm = bpm;
+  currentBpm = bpmInput;
   alert(`BPM set to ${currentBpm}`);
 
-  // If any loops or beats are playing, restart the scheduler
-  if (isBeatPlaying || isRhythmLoopPlaying || isMelodyLoopPlaying) {
+  // Restart scheduler if necessary
+  if (playbackState.beat || Object.values(playbackState.loops).some(Boolean)) {
     stopScheduler();
     startScheduler();
   }
@@ -231,93 +222,88 @@ const setVolume = (value) => {
   masterGainNode.gain.value = parseFloat(value) || 1.0;
 };
 
-// Beat Generator Configuration
-let beatGeneratorConfig = {
-  bpm: currentBpm,
-  instruments: {}, // Will be updated from UI
-  randomness: {},
-  swing: 0,
-  bars: 4, // Default number of bars
-  beatsPerBar: 4, // Default beats per bar
-};
-
-// Apply Settings
+// Apply Beat Generator Settings
 const applySettings = () => {
-  const instrumentNames = Object.values(summaryData.instrumentsByCategory).flat();
+  const instruments = Object.values(summaryData.instrumentsByCategory).flat();
+  const uniqueInstruments = [...new Set(instruments)];
 
-  const uniqueInstruments = [...new Set(instrumentNames)];
-
-  const instruments = uniqueInstruments.reduce((acc, name) => {
+  const updatedInstruments = uniqueInstruments.reduce((acc, name) => {
     const capitalized = capitalize(name);
     acc[name] = {
-      enabled: document.getElementById(`enable${capitalized}`)?.checked || false,
-      probability: parseFloat(document.getElementById(`${name.toLowerCase()}Probability`)?.value) || 0,
+      enabled: getElement(`enable${capitalized}`)?.checked || false,
+      probability: parseFloat(getElement(`${name.toLowerCase()}Probability`)?.value) || 0,
+      // Preserve or set tempoVariants
+      tempoVariants: beatGeneratorConfig.instruments[name]?.tempoVariants || defaultConfig.instruments[name]?.tempoVariants || [1],
     };
     return acc;
   }, {});
 
   const randomness = {
-    patternSelection: document.getElementById('patternSelection')?.checked || false,
-    hitVariation: document.getElementById('hitVariation')?.checked || false,
+    patternSelection: getElement('patternSelection')?.checked || false,
+    hitVariation: getElement('hitVariation')?.checked || false,
   };
 
-  const swingAmount = parseFloat(document.getElementById('swingAmount')?.value) || 0;
+  const swingAmount = parseFloat(getElement('swingAmount')?.value) || 0;
 
   // Update beat generator configuration
   beatGeneratorConfig = {
     ...beatGeneratorConfig,
-    instruments,
+    instruments: updatedInstruments,
     randomness,
     swing: swingAmount,
   };
 
   alert('Beat generator settings updated.');
 
-  // Restart the scheduler if the beat is playing
-  if (isBeatPlaying) {
+  // Restart scheduler if beat is playing
+  if (playbackState.beat) {
     stopScheduler();
+    // Refresh the beat generator instance
+    beatGeneratorInstance = new BeatGenerator(beatGeneratorConfig);
     startScheduler();
   }
 };
 
 // Event Delegation for Dynamic Buttons
 document.body.addEventListener('click', (event) => {
-  const target = event.target;
+  const { target } = event;
 
   // Handle Play Instrument Buttons
   if (target.id.startsWith('play') && !target.id.endsWith('Loop')) {
-    const instrumentName = target.id.replace('play', '').toLowerCase();
-    const playFunction = instrumentPlayFunctions[instrumentName];
-    if (playFunction) {
-      playFunction();
-    }
+    const instrumentName = target.id.replace(/^play/i, '').toLowerCase();
+    instrumentPlayFunctions[instrumentName]?.();
+    return;
   }
 
   // Handle Generate Beat Button
   if (target.id === 'generateBeat') {
     toggleBeat();
+    return;
   }
 
   // Handle Loop Buttons
-  if (target.id.startsWith('play') && target.id.endsWith('Loop')) {
-    const loopType = target.id.replace('play', '').replace('Loop', '').toLowerCase();
+  const loopMatch = target.id.match(/^play(.*)Loop$/);
+  if (loopMatch) {
+    const loopType = loopMatch[1].toLowerCase();
     const sourceKey = `${loopType}Loop`;
-    const sampleCategory = loopType; // Assuming category name matches loop type
-    toggleLoop(sourceKey, sampleCategory, loopType);
+    toggleLoop(sourceKey, loopType, loopType);
+    return;
   }
 
   // Handle Apply Settings Button
   if (target.id === 'applySettings') {
     applySettings();
+    return;
   }
 
   // Handle Set BPM Button
   if (target.id === 'setBpm') {
     setBpm();
+    return;
   }
 });
 
 // Volume Slider Event Listener
-document.getElementById('volumeSlider')?.addEventListener('input', (e) => {
+getElement('volumeSlider')?.addEventListener('input', (e) => {
   setVolume(e.target.value);
 });

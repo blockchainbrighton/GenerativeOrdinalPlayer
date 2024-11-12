@@ -44,20 +44,27 @@ export const patterns = {
       // Additional patterns can be added here
     ],
     hihat: [
-      // Steady Eighth Notes
-      [1, 1, 1, 1, 1, 1, 1, 1],
-      // Sixteenth Notes
-      [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
-      // Off-beat Hi-Hat
-      [0, 1, 0, 1, 0, 1, 0, 1],
-      // Swing Pattern (Shuffle)
-      [1, 0, 1, 0, 1, 0, 1, 0],
-      // Open Hi-Hat on "And" of 4
-      [1, 1, 1, 1, 1, 1, 1, 0],
-      // Broken Hi-Hat Pattern
-      [1, 0, 1, 1, 0, 1, 0, 1],
-      // Jazz Ride Pattern
-      [1, 0, 0, 1, 0, 1, 0, 1],
+        // High-resolution 16th-note pattern
+        [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+        // High-resolution 32nd-note pattern
+        Array(32).fill(1),
+        // Triplet Feel (12 steps per bar)
+        [1, 0, 1, 0, 1, 0, 1, 0, 1, 0, 1, 0],
+        // Additional high-resolution patterns can be added here
+    //   [1, 1, 1, 1, 1, 1, 1, 1],
+    //   // Sixteenth Notes
+    //   [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1],
+    //   // Off-beat Hi-Hat
+    //   [0, 1, 0, 1, 0, 1, 0, 1],
+    //   // Swing Pattern (Shuffle)
+    //   [1, 0, 1, 0, 1, 0, 1, 0],
+    //   // Open Hi-Hat on "And" of 4
+    //   [1, 1, 1, 1, 1, 1, 1, 0],
+    //   // Broken Hi-Hat Pattern
+    //   [1, 0, 1, 1, 0, 1, 0, 1],
+    //   // Jazz Ride Pattern
+    //   [1, 0, 0, 1, 0, 1, 0, 1],
+
       // More patterns can be added here
     ],
     rimshot: [

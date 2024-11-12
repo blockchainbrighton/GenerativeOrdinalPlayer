@@ -15,7 +15,7 @@ const defaultConfig = {
   instruments: {
     kick: { enabled: true, probability: 0.9 },
     snare: { enabled: true, probability: 0.8 },
-    hihat: { enabled: true, probability: 0.95 },
+    hihat: { enabled: true, probability: 0.95, tempoVariants: [1, 2, 4] }, // Tempo variants for hihat
     rimshot: { enabled: false, probability: 0.5 },
     floortom: { enabled: true, probability: 0.3 },
     hightom: { enabled: true, probability: 0.3 },
@@ -33,20 +33,18 @@ const defaultConfig = {
  * @param {object} userConfig - User-provided configuration.
  * @returns {object} - Merged configuration.
  */
-function mergeConfigs(userConfig = {}) {
-  return {
-    ...defaultConfig,
-    ...userConfig,
-    instruments: {
-      ...defaultConfig.instruments,
-      ...(userConfig.instruments || {}),
-    },
-    randomness: {
-      ...defaultConfig.randomness,
-      ...(userConfig.randomness || {}),
-    },
-  };
-}
+const mergeConfigs = (userConfig = {}) => ({
+  ...defaultConfig,
+  ...userConfig,
+  instruments: {
+    ...defaultConfig.instruments,
+    ...(userConfig.instruments || {}),
+  },
+  randomness: {
+    ...defaultConfig.randomness,
+    ...(userConfig.randomness || {}),
+  },
+});
 
 /**
  * BeatGenerator class to manage beat patterns and scheduling.
@@ -54,12 +52,36 @@ function mergeConfigs(userConfig = {}) {
 export class BeatGenerator {
   constructor(userConfig = {}) {
     this.config = mergeConfigs(userConfig);
-    this.patterns = this.generatePatterns();
+    this.initializeTempoModifiers();
+    this.generatePatterns();
+  }
+
+  /**
+   * Initializes tempo modifiers for instruments that have tempo variants.
+   */
+  initializeTempoModifiers() {
+    this.tempoModifiers = {};
+    for (const [instrument, settings] of Object.entries(this.config.instruments)) {
+      if (settings.tempoVariants && settings.tempoVariants.length > 1) {
+        this.tempoModifiers[instrument] = {
+          currentVariantIndex: 0, // Start with the first variant
+          stepsUntilChange: this.randomTempoChangeFrequency(),
+        };
+      }
+    }
+  }
+
+  /**
+   * Generates a random frequency for tempo changes.
+   * @returns {number} - Steps until the next tempo change.
+   */
+  randomTempoChangeFrequency() {
+    // Change tempo variant every 8 to 16 steps
+    return Math.floor(Math.random() * 9) + 8;
   }
 
   /**
    * Generates patterns for each instrument based on the configuration.
-   * @returns {object} - Generated patterns for each instrument.
    */
   generatePatterns() {
     const {
@@ -68,48 +90,87 @@ export class BeatGenerator {
       bars,
       randomness: { patternSelection, hitVariation },
       patterns: importedPatterns,
+      bpm,
     } = this.config;
-    const totalSteps = beatsPerBar * bars;
 
-    const generatedPatterns = {};
+    this.beatDuration = 60 / bpm;
+    this.totalDuration = this.beatDuration * beatsPerBar * bars;
 
-    for (const [instrumentName, instrument] of Object.entries(instruments)) {
-      if (!instrument.enabled) continue;
+    // Determine the highest tempo multiplier among all instruments
+    const maxTempoMultiplier = Math.max(
+      ...Object.values(instruments).map((settings) =>
+        settings.tempoVariants ? Math.max(...settings.tempoVariants) : 1
+      )
+    );
 
+    // The highest resolution is the base for all patterns
+    const maxResolution = beatsPerBar * bars * maxTempoMultiplier;
+
+    // The base step duration for the highest resolution
+    this.baseStepDuration = this.totalDuration / maxResolution;
+
+    this.generatedPatterns = {};
+    this.instrumentStepDurations = {}; // Store per-instrument step durations
+
+    for (const [instrumentName, settings] of Object.entries(instruments)) {
+      if (!settings.enabled) continue;
+
+      // Determine current tempo multiplier
+      let tempoMultiplier = 1;
+      if (settings.tempoVariants && settings.tempoVariants.length > 0) {
+        const modifier = this.tempoModifiers[instrumentName];
+        if (modifier) {
+          tempoMultiplier = settings.tempoVariants[modifier.currentVariantIndex];
+        }
+      }
+
+      // Calculate step duration for this instrument
+      const stepDuration = this.baseStepDuration / (tempoMultiplier / maxTempoMultiplier);
+      this.instrumentStepDurations[instrumentName] = stepDuration;
+
+      // Select or generate base pattern at max resolution
+      let basePattern = [];
       const instrumentPatterns = importedPatterns[instrumentName] || [];
-      let basePattern = instrumentPatterns.length
-        ? patternSelection
+
+      if (instrumentPatterns.length > 0) {
+        basePattern = patternSelection
           ? instrumentPatterns[Math.floor(Math.random() * instrumentPatterns.length)]
-          : instrumentPatterns[0]
-        : Array(beatsPerBar).fill(0);
+          : instrumentPatterns[0];
+      } else {
+        // Default to a pattern with hits on every step
+        basePattern = Array(maxResolution).fill(1);
+      }
 
-      const patternLength = basePattern.length;
-      const stepsPerBeat = patternLength / beatsPerBar;
+      // Downsample the base pattern according to tempoMultiplier
+      const pattern = this.downsamplePattern(basePattern, maxTempoMultiplier / tempoMultiplier);
 
-      // Generate the pattern for the total number of steps
-      const pattern = Array(totalSteps)
-        .fill(0)
-        .map((_, i) => {
-          const stepInPattern = i % patternLength;
-          let shouldPlay = basePattern[stepInPattern] === 1;
-
-          // Apply probability during pattern generation
-          if (shouldPlay && Math.random() > instrument.probability) {
-            shouldPlay = false;
+      // Apply probability and hit variation
+      for (let i = 0; i < pattern.length; i++) {
+        if (pattern[i] === 1) {
+          if (Math.random() > settings.probability) {
+            pattern[i] = 0;
           }
+        } else if (hitVariation && Math.random() < 0.1) {
+          pattern[i] = 1;
+        }
+      }
 
-          // Add random extra hits if enabled
-          if (!shouldPlay && hitVariation && Math.random() < 0.1) {
-            shouldPlay = true;
-          }
-
-          return shouldPlay ? 1 : 0;
-        });
-
-      generatedPatterns[instrumentName] = pattern;
+      this.generatedPatterns[instrumentName] = pattern;
     }
+  }
 
-    return generatedPatterns;
+  /**
+   * Downsamples a pattern by a given factor.
+   * @param {Array} pattern - The high-resolution pattern.
+   * @param {number} factor - The factor by which to downsample.
+   * @returns {Array} - The downsampled pattern.
+   */
+  downsamplePattern(pattern, factor) {
+    const downsampledPattern = [];
+    for (let i = 0; i < pattern.length; i += factor) {
+      downsampledPattern.push(pattern[Math.floor(i)]);
+    }
+    return downsampledPattern;
   }
 
   /**
@@ -117,38 +178,51 @@ export class BeatGenerator {
    * @param {number} startTime - The time to start scheduling from.
    */
   scheduleBeat(startTime = audioContext.currentTime + 0.1) {
-    const { bpm, swing, beatsPerBar, bars } = this.config;
-    const beatDuration = 60 / bpm;
-    const patternLength = this.getPatternLength();
-    if (patternLength === 0) return;
-
-    const stepDuration = beatDuration / (patternLength / (beatsPerBar * bars));
-
+    const { swing } = this.config;
     const scheduledSounds = [];
     const uniqueSamples = new Set();
 
-    for (const [instrumentName, pattern] of Object.entries(this.patterns)) {
+    // Determine the maximum pattern length among all instruments
+    const maxPatternLength = Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
+
+    for (const [instrumentName, pattern] of Object.entries(this.generatedPatterns)) {
+      const stepDuration = this.instrumentStepDurations[instrumentName];
+
       for (let i = 0; i < pattern.length; i++) {
+        if (pattern[i] !== 1) continue;
+
         let time = startTime + i * stepDuration;
 
         // Apply swing to off-beats
-        if (swing > 0 && (i % (2 * (patternLength / (beatsPerBar * bars)))) >= (patternLength / (beatsPerBar * bars))) {
+        const isOffBeat = (i % 2) !== 0;
+        if (swing > 0 && isOffBeat) {
           time += stepDuration * swing;
         }
 
-        if (pattern[i] === 1) {
-          const samplesList = getSamplesByType('drum', instrumentName);
-          if (samplesList.length > 0) {
-            const selectedSample = playRandomSampleAtTime(samplesList, time);
-            if (selectedSample) {
-              scheduledSounds.push({
-                instrument: instrumentName,
-                sample: selectedSample.type,
-                time: time.toFixed(3), // Rounded for readability
-              });
-              uniqueSamples.add(selectedSample.type);
-            }
+        const samplesList = getSamplesByType('drum', instrumentName);
+        if (samplesList.length > 0) {
+          const selectedSample = playRandomSampleAtTime(samplesList, time);
+          if (selectedSample) {
+            scheduledSounds.push({
+              instrument: instrumentName,
+              sample: selectedSample.type,
+              time: time.toFixed(3),
+            });
+            uniqueSamples.add(selectedSample.type);
           }
+        }
+      }
+
+      // Update tempo modifiers for the instrument
+      const settings = this.config.instruments[instrumentName];
+      const modifier = this.tempoModifiers[instrumentName];
+      if (settings.tempoVariants && modifier) {
+        modifier.stepsUntilChange -= 1;
+        if (modifier.stepsUntilChange <= 0) {
+          modifier.currentVariantIndex = (modifier.currentVariantIndex + 1) % settings.tempoVariants.length;
+          modifier.stepsUntilChange = this.randomTempoChangeFrequency();
+          // Regenerate the patterns with the new tempo variant
+          this.generatePatterns();
         }
       }
     }
@@ -166,13 +240,18 @@ export class BeatGenerator {
 
   /**
    * Returns the length of the pattern in steps.
-   * @returns {number} - The length of the pattern.
+   * @returns {number} - The maximum pattern length.
    */
   getPatternLength() {
-    // Assuming all patterns have the same length
-    const instrumentNames = Object.keys(this.patterns);
-    if (instrumentNames.length === 0) return 0;
-    return this.patterns[instrumentNames[0]].length;
+    return Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
+  }
+
+  /**
+   * Refreshes the patterns, useful when configuration changes.
+   */
+  refreshPatterns() {
+    this.initializeTempoModifiers();
+    this.generatePatterns();
   }
 }
 
@@ -182,11 +261,11 @@ export class BeatGenerator {
  * @param {string} type - Sample type.
  * @returns {Array} - List of matching samples.
  */
-function getSamplesByType(category, type) {
+const getSamplesByType = (category, type) => {
   const standardizedType = type.toLowerCase();
   const tomTypes = ['floortom', 'hightom', 'tom'];
 
-  return samples.filter(sample => {
+  return samples.filter((sample) => {
     if (sample.category !== category) return false;
     const sampleType = sample.type.toLowerCase();
 
@@ -196,7 +275,7 @@ function getSamplesByType(category, type) {
 
     return sampleType === standardizedType;
   });
-}
+};
 
 /**
  * Plays a random sample from a list at a specific time.
@@ -204,10 +283,10 @@ function getSamplesByType(category, type) {
  * @param {number} time - Time to play the sample.
  * @returns {object|null} - The selected sample or null if none.
  */
-function playRandomSampleAtTime(sampleList, time) {
+const playRandomSampleAtTime = (sampleList, time) => {
   if (!Array.isArray(sampleList) || sampleList.length === 0) return null;
   const randomIndex = Math.floor(Math.random() * sampleList.length);
   const sample = sampleList[randomIndex];
   playSampleAtTime(sample.category, sample.type, time);
   return sample;
-}
+};
