@@ -22,6 +22,8 @@ function barsBeatsToSeconds(bars, beats, bpm, beatsPerBar = 4) {
  * @returns {object|null} - The sample object or null if not found.
  */
 export function getSample(category, type) {
+  console.log(`Looking for sample with category: ${category}, type: ${type}`);
+
   return samples.find(sample => sample.category === category && sample.type === type.toLowerCase()) || null;
 }
 
@@ -56,10 +58,18 @@ export async function playSampleAtTime(category, type, time) {
   source.connect(gainNode).connect(masterGainNode);
 
   // Handle trimming
-  const startOffset = sample.properties.trimStart || 0;
-  const duration = audioBuffer.duration - startOffset - (sample.properties.trimEnd || 0);
+  const trimStart = sample.properties.trimStart || 0;
+  const trimEnd = sample.properties.trimEnd || 0;
+  const duration = audioBuffer.duration - trimStart - trimEnd;
 
-  source.start(time, startOffset, duration);
+  // Handle looping if necessary
+  if (sample.properties.loop) {
+    source.loop = true;
+    source.loopStart = trimStart;
+    source.loopEnd = audioBuffer.duration - trimEnd;
+  }
+
+  source.start(time, trimStart, duration);
 }
 
 /**

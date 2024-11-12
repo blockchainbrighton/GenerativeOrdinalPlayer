@@ -80,18 +80,23 @@ const instrumentPlayFunctions = Object.entries(summaryData.instrumentsByCategory
 // Scheduler function
 const scheduler = () => {
   while (nextNoteTime < audioContext.currentTime + SCHEDULER_CONFIG.scheduleAheadTime) {
+    // Schedule loops
+    Object.keys(playbackState.loops).forEach((loopKey) => {
+      if (playbackState.loops[loopKey]) {
+        const [category, type] =
+          loopKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
+        scheduleLoop(category, type, nextNoteTime, loopKey);
+      }
+    });
+
+    // Schedule beats if beat playback is enabled
     if (playbackState.beat && beatGeneratorInstance) {
       beatGeneratorInstance.scheduleBeat(nextNoteTime);
       const patternDuration = (60 / currentBpm) * beatGeneratorInstance.getPatternLength();
       nextNoteTime += patternDuration;
+    } else {
+      nextNoteTime += (60 / currentBpm) * 4; // Move to the next bar
     }
-
-    Object.keys(playbackState.loops).forEach((loopKey) => {
-      if (playbackState.loops[loopKey]) {
-        const [category, type] = loopKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
-        scheduleLoop(category, type, nextNoteTime, loopKey);
-      }
-    });
   }
   timerID = setTimeout(scheduler, SCHEDULER_CONFIG.lookahead);
 };
@@ -144,9 +149,13 @@ const toggleBeat = () => {
 };
 
 // Toggle Loop Playback
-const toggleLoop = (sourceKey, sampleCategory, type) => {
+const toggleLoop = (sourceKey) => {
   playbackState.loops[sourceKey] = !playbackState.loops[sourceKey];
-  toggleClass(getElement(sourceKey === 'rhythmLoop' ? 'playRhythmLoop' : 'playMelodyLoop'), 'active', playbackState.loops[sourceKey]);
+  toggleClass(
+    getElement(sourceKey === 'rhythmLoop' ? 'playRhythmLoop' : 'playMelodyLoop'),
+    'active',
+    playbackState.loops[sourceKey]
+  );
 
   if (playbackState.loops[sourceKey]) {
     startScheduler();
@@ -159,6 +168,8 @@ const toggleLoop = (sourceKey, sampleCategory, type) => {
 // Schedule a loop with adjusted loopEnd based on playbackRate
 const scheduleLoop = async (category, type, time, sourceKey) => {
   if (activeSources.has(sourceKey)) return; // Already scheduled
+
+  console.log(`Scheduling loop for category: ${category}, type: ${type}`);
 
   const sample = getSample(category, type);
   if (!sample) return;
@@ -175,29 +186,31 @@ const scheduleLoop = async (category, type, time, sourceKey) => {
   source.connect(gainNode).connect(masterGainNode);
 
   // Set playback rate
-  const playbackRate = ((sample.properties.playbackRate || 1.0) * (currentBpm / (sample.properties.bpm || sample.tempo || 120))) || 1.0;
+  const playbackRate =
+    ((sample.properties.playbackRate || 1.0) * (currentBpm / (sample.properties.bpm || sample.tempo || 120))) ||
+    1.0;
   source.playbackRate.value = playbackRate;
 
   // Handle trimming
-  const { trimStart = 0, trimEnd = 0 } = sample.properties;
+  const trimStart = sample.properties.trimStart || 0;
+  const trimEnd = sample.properties.trimEnd || 0;
 
-  // Calculate adjusted loopEnd based on playbackRate
-  const originalLoopDuration = audioBuffer.duration - trimEnd - trimStart;
-  const adjustedLoopDuration = originalLoopDuration / playbackRate;
-  const adjustedLoopEnd = trimStart + adjustedLoopDuration;
+  // Set loop points in the sample's time coordinates
+  const loopStart = trimStart;
+  const loopEnd = audioBuffer.duration - trimEnd;
 
   source.loop = true;
-  source.loopStart = trimStart;
-  source.loopEnd = adjustedLoopEnd;
+  source.loopStart = loopStart;
+  source.loopEnd = loopEnd;
+
+  console.log(`Scheduled loop: ${sample.type} at time ${time.toFixed(3)} with playbackRate ${playbackRate}`);
+  console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 
   // Start the source at the scheduled time
   source.start(time, trimStart);
 
   // Store the source for later control
   activeSources.set(sourceKey, source);
-
-  console.log(`Scheduled loop: ${sample.type} at time ${time.toFixed(3)} with playbackRate ${playbackRate}`);
-  console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 };
 
 // BPM Control
@@ -268,6 +281,15 @@ const applySettings = () => {
 document.body.addEventListener('click', (event) => {
   const { target } = event;
 
+  // Handle Loop Buttons
+  const loopMatch = target.id.match(/^play(.*)Loop$/);
+    if (loopMatch) {
+      const loopType = loopMatch[1].toLowerCase();
+      const sourceKey = `${loopType}Loop`;
+      toggleLoop(sourceKey);
+      return;
+    }
+
   // Handle Play Instrument Buttons
   if (target.id.startsWith('play') && !target.id.endsWith('Loop')) {
     const instrumentName = target.id.replace(/^play/i, '').toLowerCase();
@@ -278,15 +300,6 @@ document.body.addEventListener('click', (event) => {
   // Handle Generate Beat Button
   if (target.id === 'generateBeat') {
     toggleBeat();
-    return;
-  }
-
-  // Handle Loop Buttons
-  const loopMatch = target.id.match(/^play(.*)Loop$/);
-  if (loopMatch) {
-    const loopType = loopMatch[1].toLowerCase();
-    const sourceKey = `${loopType}Loop`;
-    toggleLoop(sourceKey, loopType, loopType);
     return;
   }
 

@@ -11,6 +11,11 @@ masterGainNode.connect(audioContext.destination);
  * @returns {Promise<AudioBuffer|null>}
  */
 export async function loadSample(sample) {
+  if (!sample || !sample.url) {
+    console.warn(`Invalid sample or missing URL: ${sample}`);
+    return null;
+  }
+
   try {
     const response = await fetch(sample.url);
     const arrayBuffer = await response.arrayBuffer();
