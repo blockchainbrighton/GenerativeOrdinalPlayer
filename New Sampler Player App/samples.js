@@ -165,6 +165,8 @@ export const samples = [
           trimEnd: 0.02,
           volume: 1.0,
           playbackRate: 0.33,
+          loopBars: 4, // This loop is 4 bars long
+
       },
       note: null,
       key: 'D Minor',

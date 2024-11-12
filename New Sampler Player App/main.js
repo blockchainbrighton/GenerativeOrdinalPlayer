@@ -10,7 +10,7 @@ import { audioContext, masterGainNode, loadSample } from './audioLoader.js';
 import { BeatGenerator } from './beatGenerator.js';
 import { summaryData } from './summary.js'; // Import summary data for dynamic handling
 
-let beatGeneratorInstance = null;
+let beatGeneratorInstance = null; // Declare at the global scope
 
 // Scheduler constants
 const CURRENT_BPM_DEFAULT = 137;
@@ -23,6 +23,9 @@ const SCHEDULER_CONFIG = {
 
 let nextNoteTime = 0.0;
 let timerID = null;
+
+let globalStartTime = null;
+let barCount = 0;
 
 // Playback state management
 const playbackState = {
@@ -83,20 +86,24 @@ const scheduler = () => {
     // Schedule loops
     Object.keys(playbackState.loops).forEach((loopKey) => {
       if (playbackState.loops[loopKey]) {
-        const [category, type] =
-          loopKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
-        scheduleLoop(category, type, nextNoteTime, loopKey);
+        if (!activeSources.has(loopKey)) {
+          const [category, type] =
+            loopKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
+          scheduleLoop(category, type, nextNoteTime, loopKey);
+        }
       }
     });
 
     // Schedule beats if beat playback is enabled
     if (playbackState.beat && beatGeneratorInstance) {
       beatGeneratorInstance.scheduleBeat(nextNoteTime);
-      const patternDuration = (60 / currentBpm) * beatGeneratorInstance.getPatternLength();
-      nextNoteTime += patternDuration;
-    } else {
-      nextNoteTime += (60 / currentBpm) * 4; // Move to the next bar
     }
+
+    // Advance nextNoteTime and barCount
+    const secondsPerBeat = 60 / currentBpm;
+    const secondsPerBar = secondsPerBeat * beatGeneratorConfig.beatsPerBar;
+    nextNoteTime += secondsPerBar;
+    barCount += 1;
   }
   timerID = setTimeout(scheduler, SCHEDULER_CONFIG.lookahead);
 };
@@ -104,7 +111,8 @@ const scheduler = () => {
 // Scheduler control
 const startScheduler = () => {
   if (!timerID) {
-    nextNoteTime = audioContext.currentTime + 0.1; // Slight delay to start
+    globalStartTime = audioContext.currentTime + 0.1; // Slight delay to start
+    nextNoteTime = globalStartTime;
     scheduler();
   }
 };
@@ -133,6 +141,25 @@ const toggleBeat = () => {
   toggleClass(getElement('generateBeat'), 'active', playbackState.beat);
 
   if (playbackState.beat) {
+    // Determine bars from the playing loops
+    let bars = 4; // Default
+    const playingLoopKeys = Object.keys(playbackState.loops).filter((key) => playbackState.loops[key]);
+    if (playingLoopKeys.length > 0) {
+      // Get the maximum loopBars among the playing loops
+      bars = Math.max(
+        ...playingLoopKeys.map((sourceKey) => {
+          const sample = getSample(
+            sourceKey === 'rhythmLoop' ? 'percussionLoop' : 'melodicLoop',
+            sourceKey === 'rhythmLoop' ? 'rhythm' : 'melody'
+          );
+          return sample?.properties?.loopBars || 4;
+        })
+      );
+    }
+    // Update beatGeneratorConfig.bars
+    beatGeneratorConfig.bars = bars;
+
+    // Create a new instance of BeatGenerator
     beatGeneratorInstance = new BeatGenerator({
       bpm: currentBpm,
       instruments: beatGeneratorConfig.instruments,
@@ -141,10 +168,20 @@ const toggleBeat = () => {
       bars: beatGeneratorConfig.bars,
       beatsPerBar: beatGeneratorConfig.beatsPerBar,
     });
-    nextNoteTime = audioContext.currentTime + 0.1;
-    startScheduler();
+
+    if (!timerID) {
+      startScheduler();
+    } else {
+      // Scheduler is already running
+      // Schedule beat to start at next bar boundary
+      const nextBarStartTime = getNextBarStartTime();
+      beatGeneratorInstance.scheduleBeat(nextBarStartTime);
+    }
   } else {
-    stopScheduler();
+    beatGeneratorInstance = null;
+    if (!Object.values(playbackState.loops).some(Boolean)) {
+      stopScheduler();
+    }
   }
 };
 
@@ -158,18 +195,40 @@ const toggleLoop = (sourceKey) => {
   );
 
   if (playbackState.loops[sourceKey]) {
-    startScheduler();
+    if (!timerID) {
+      startScheduler();
+    } else {
+      // Scheduler is already running
+      // Schedule loop to start at next bar boundary
+      const nextBarStartTime = getNextBarStartTime();
+      const [category, type] =
+        sourceKey === 'rhythmLoop' ? ['percussionLoop', 'rhythm'] : ['melodicLoop', 'melody'];
+      scheduleLoop(category, type, nextBarStartTime, sourceKey);
+    }
   } else {
     stopSource(sourceKey);
-    stopScheduler();
+    if (!playbackState.beat && !Object.values(playbackState.loops).some(Boolean)) {
+      stopScheduler();
+    }
   }
+};
+
+
+const getNextBarStartTime = () => {
+  const now = audioContext.currentTime;
+  const secondsPerBeat = 60 / currentBpm;
+  const secondsPerBar = secondsPerBeat * beatGeneratorConfig.beatsPerBar;
+  const elapsedSinceGlobalStart = now - globalStartTime;
+  const barsElapsed = Math.floor(elapsedSinceGlobalStart / secondsPerBar);
+  const nextBarStartTime = globalStartTime + (barsElapsed + 1) * secondsPerBar;
+  return nextBarStartTime;
 };
 
 // Schedule a loop with adjusted loopEnd based on playbackRate
 const scheduleLoop = async (category, type, time, sourceKey) => {
   if (activeSources.has(sourceKey)) return; // Already scheduled
 
-  console.log(`Scheduling loop for category: ${category}, type: ${type}`);
+  console.log(`Scheduling loop '${sourceKey}' for category: ${category}, type: ${type} at time ${time.toFixed(3)} seconds`);
 
   const sample = getSample(category, type);
   if (!sample) return;
@@ -203,8 +262,10 @@ const scheduleLoop = async (category, type, time, sourceKey) => {
   source.loopStart = loopStart;
   source.loopEnd = loopEnd;
 
-  console.log(`Scheduled loop: ${sample.type} at time ${time.toFixed(3)} with playbackRate ${playbackRate}`);
+  // Log loop details
+  console.log(`Loop '${sample.name}' scheduled to start at audio time: ${time.toFixed(3)} seconds`);
   console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
+  console.log(`Playback Rate: ${playbackRate}`);
 
   // Start the source at the scheduled time
   source.start(time, trimStart);

@@ -69,6 +69,9 @@ export async function playSampleAtTime(category, type, time) {
     source.loopEnd = audioBuffer.duration - trimEnd;
   }
 
+  // Log the sample's scheduled start time
+  console.log(`Sample '${sample.name}' scheduled to start at audio time: ${time.toFixed(3)} seconds`);
+
   source.start(time, trimStart, duration);
 }
 
@@ -143,12 +146,16 @@ export async function playSample(sample, globalBpm = null) {
     source.loopStart = loopStart;
     source.loopEnd = loopEnd;
 
+    // Log loop details
     console.log(`Playing loop: ${sample.name}`);
     console.log(`Playback Rate: ${playbackRate}`);
     console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 
+    // Start the source immediately (or at a scheduled time if needed)
     source.start(0, startOffset);
   } else {
+    // Log sample start time
+    console.log(`Playing sample: ${sample.name} at current time`);
     source.start(0, startOffset, duration);
   }
 }

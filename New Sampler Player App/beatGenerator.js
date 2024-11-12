@@ -185,6 +185,9 @@ export class BeatGenerator {
     const scheduledSounds = [];
     const uniqueSamples = new Set();
   
+    // Log the start time of the beat
+    console.log(`Beat scheduled to start at audio time: ${startTime.toFixed(3)} seconds`);
+  
     // Keep track of cycles to trigger fills at specific times
     if (this.cycleCount === undefined) {
       this.cycleCount = 0;
@@ -201,6 +204,8 @@ export class BeatGenerator {
     // Determine the maximum pattern length among all instruments
     const maxPatternLength = Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
   
+    let firstBeatTimeLogged = false;
+  
     for (const [instrumentName, pattern] of Object.entries(this.generatedPatterns)) {
       const stepDuration = this.instrumentStepDurations[instrumentName];
   
@@ -213,6 +218,12 @@ export class BeatGenerator {
         const isOffBeat = (i % 2) !== 0;
         if (swing > 0 && isOffBeat) {
           time += stepDuration * swing;
+        }
+  
+        // Log the time of the first beat
+        if (!firstBeatTimeLogged) {
+          console.log(`First beat scheduled at audio time: ${time.toFixed(3)} seconds`);
+          firstBeatTimeLogged = true;
         }
   
         const samplesList = getSamplesByType('drum', instrumentName);
