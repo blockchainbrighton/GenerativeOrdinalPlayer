@@ -1,6 +1,6 @@
 // player.js
 import { samples } from './samples.js';
-import { audioContext, loadSample } from './audioLoader.js';
+import { audioContext, masterGainNode, loadSample } from './audioLoader.js';
 
 /**
  * Convert bars and beats to seconds based on BPM.
@@ -22,7 +22,7 @@ function barsBeatsToSeconds(bars, beats, bpm, beatsPerBar = 4) {
  * @returns {object|null} - The sample object or null if not found.
  */
 export function getSample(category, type) {
-  return samples.find(sample => sample.category === category && sample.type === type) || null;
+  return samples.find(sample => sample.category === category && sample.type === type.toLowerCase()) || null;
 }
 
 /**
@@ -33,10 +33,15 @@ export function getSample(category, type) {
  */
 export async function playSampleAtTime(category, type, time) {
   const sample = getSample(category, type);
-  if (!sample) return;
-
+  if (!sample) {
+    console.warn(`Sample not found: Category - ${category}, Type - ${type}`);
+    return;
+  }
   const audioBuffer = await loadSample(sample);
-  if (!audioBuffer) return;
+  if (!audioBuffer) {
+    console.warn(`Failed to load audio buffer for sample: ${sample.name}`);
+    return;
+  }
 
   const source = audioContext.createBufferSource();
   source.buffer = audioBuffer;
@@ -48,7 +53,7 @@ export async function playSampleAtTime(category, type, time) {
   const gainNode = audioContext.createGain();
   gainNode.gain.value = sample.properties.volume || 1.0;
 
-  source.connect(gainNode).connect(audioContext.destination);
+  source.connect(gainNode).connect(masterGainNode);
 
   // Handle trimming
   const startOffset = sample.properties.trimStart || 0;
@@ -74,7 +79,7 @@ export async function playSample(sample, globalBpm = null) {
   const gainNode = audioContext.createGain();
   gainNode.gain.value = sample.properties.volume || 1.0;
 
-  source.connect(gainNode).connect(audioContext.destination);
+  source.connect(gainNode).connect(masterGainNode);
 
   // Set playback rate
   let playbackRate = sample.properties.playbackRate || 1.0;
@@ -145,7 +150,7 @@ export async function playSample(sample, globalBpm = null) {
  * @param {number|null} globalBpm - Optional global BPM to override sample BPM.
  */
 export async function playRandomSample(category, type, globalBpm = null) {
-  const filteredSamples = samples.filter(sample => sample.category === category && sample.type === type);
+  const filteredSamples = samples.filter(sample => sample.category === category && sample.type === type.toLowerCase());
 
   if (filteredSamples.length === 0) {
     console.warn(`No samples found for category: ${category}, type: ${type}`);
@@ -174,8 +179,8 @@ export async function playHiHat(globalBpm = null) {
   await playRandomSample('drum', 'hihat', globalBpm);
 }
 
-export async function playTonalHit(globalBpm = null) {
-  await playRandomSample('tonal', 'instrument', globalBpm);
+export async function playRimshot(globalBpm = null) {
+  await playRandomSample('drum', 'rimshot', globalBpm);
 }
 
 export async function playRhythmLoop(globalBpm = null) {

@@ -2,70 +2,60 @@
 import { samples } from './samples.js';
 
 /**
- * Generates and logs a summary of the samples.
+ * Generates a summary of the samples.
+ * @returns {Object} Summary data including categories, types, and instruments.
  */
 export function generateSummary() {
   // Total number of samples
   const totalSamples = samples.length;
 
-  // Extract unique categories
+  // Extract unique categories and types
   const categories = [...new Set(samples.map(sample => sample.category))];
-
-  // Extract unique types
   const types = [...new Set(samples.map(sample => sample.type))];
 
-  // List of all sample names
-  const names = samples.map(sample => sample.name);
+  // Extract instruments per category
+  const instrumentsByCategory = categories.reduce((acc, category) => {
+    acc[category] = samples
+      .filter(sample => sample.category === category)
+      .map(sample => sample.type);
+    acc[category] = [...new Set(acc[category])]; // Ensure uniqueness
+    return acc;
+  }, {});
 
   // Additional summaries can be added here as needed
 
-  // Log the summary to the console
-  console.log('=== Samples Summary ===');
-  console.log(`Total Samples: ${totalSamples}\n`);
-
-  console.log('Categories:');
-  categories.forEach(category => {
-    console.log(`- ${category}`);
-  });
-  console.log('');
-
-  console.log('Types:');
-  types.forEach(type => {
-    console.log(`- ${type}`);
-  });
-  console.log('');
-
-  console.log('Sample Names:');
-  names.forEach(name => {
-    console.log(`- ${name}`);
-  });
-  console.log('========================\n');
+  return {
+    totalSamples,
+    categories,
+    types,
+    instrumentsByCategory,
+  };
 }
 
-// Count per category
-const categoryCounts = samples.reduce((acc, sample) => {
-    acc[sample.category] = (acc[sample.category] || 0) + 1;
-    return acc;
-  }, {});
-  
-  // Count per type
-  const typeCounts = samples.reduce((acc, sample) => {
-    acc[sample.type] = (acc[sample.type] || 0) + 1;
-    return acc;
-  }, {});
-  
-  // Log counts
-  console.log('Category Counts:');
-  for (const [category, count] of Object.entries(categoryCounts)) {
-    console.log(`- ${category}: ${count}`);
-  }
-  console.log('');
-  
-  console.log('Type Counts:');
-  for (const [type, count] of Object.entries(typeCounts)) {
-    console.log(`- ${type}: ${count}`);
-  }
-  console.log('');
-
 // Automatically generate the summary when this module is imported
-generateSummary();
+const summaryData = generateSummary();
+
+// Log the summary to the console
+console.log('=== Samples Summary ===');
+console.log(`Total Samples: ${summaryData.totalSamples}\n`);
+
+console.log('Categories:');
+summaryData.categories.forEach(category => {
+  console.log(`- ${category}`);
+});
+console.log('');
+
+console.log('Types:');
+summaryData.types.forEach(type => {
+  console.log(`- ${type}`);
+});
+console.log('');
+
+console.log('Instruments by Category:');
+for (const [category, instruments] of Object.entries(summaryData.instrumentsByCategory)) {
+  console.log(`- ${category}: ${instruments.join(', ')}`);
+}
+console.log('========================\n');
+
+// Export the summary data for use in other modules
+export { summaryData };
