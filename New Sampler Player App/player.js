@@ -80,7 +80,7 @@ export async function playSampleAtTime(category, type, time) {
  * @param {object} sample - The sample object.
  * @param {number|null} globalBpm - Optional global BPM to override sample BPM.
  */
-export async function playSample(sample, globalBpm = null) {
+export async function playSample(sample, globalBpm = null, startTime = null) {
   if (!sample) return;
 
   const audioBuffer = await loadSample(sample);
@@ -151,12 +151,15 @@ export async function playSample(sample, globalBpm = null) {
     console.log(`Playback Rate: ${playbackRate}`);
     console.log(`Loop Start: ${source.loopStart} sec, Loop End: ${source.loopEnd} sec`);
 
-    // Start the source immediately (or at a scheduled time if needed)
-    source.start(0, startOffset);
+    // Start the source at the specified time
+    const scheduledStartTime = startTime !== null ? startTime : audioContext.currentTime;
+    console.log(`Sample '${sample.name}' scheduled to start at audio time: ${scheduledStartTime.toFixed(3)} seconds`);
+    source.start(scheduledStartTime, startOffset);
   } else {
     // Log sample start time
-    console.log(`Playing sample: ${sample.name} at current time`);
-    source.start(0, startOffset, duration);
+    const scheduledStartTime = startTime !== null ? startTime : audioContext.currentTime;
+    console.log(`Playing sample: ${sample.name} at audio time: ${scheduledStartTime.toFixed(3)} seconds`);
+    source.start(scheduledStartTime, startOffset, duration);
   }
 }
 
@@ -166,7 +169,7 @@ export async function playSample(sample, globalBpm = null) {
  * @param {string} type - The type within the category.
  * @param {number|null} globalBpm - Optional global BPM to override sample BPM.
  */
-export async function playRandomSample(category, type, globalBpm = null) {
+export async function playRandomSample(category, type, globalBpm = null, startTime = null) {
   const filteredSamples = samples.filter(sample => sample.category === category && sample.type === type.toLowerCase());
 
   if (filteredSamples.length === 0) {
@@ -177,7 +180,7 @@ export async function playRandomSample(category, type, globalBpm = null) {
   const randomIndex = Math.floor(Math.random() * filteredSamples.length);
   const sample = filteredSamples[randomIndex];
 
-  await playSample(sample, globalBpm);
+  await playSample(sample, globalBpm, startTime);
 }
 
 /**
@@ -207,3 +210,61 @@ export async function playRhythmLoop(globalBpm = null) {
 export async function playMelodyLoop(globalBpm = null) {
   await playRandomSample('loop', 'melody', globalBpm);
 }
+
+/** Dev notes for playres.js
+ * ### Summary of `player.js`
+
+The `player.js` module handles the playback of audio samples using the **Web Audio API**. It provides functions to load, play, and manipulate samples in different categories (e.g., drum, loop). The module supports various playback options, including adjusting playback rates based on BPM, trimming audio samples, looping, and managing the scheduling of audio playback.
+
+### Key Features:
+- **Sample Retrieval**: Retrieves samples based on their category and type.
+- **Playback Scheduling**: Plays samples at specific times and supports advanced features like trimming, looping, and adjusting playback rates.
+- **Random Sample Playback**: Allows playing a random sample from a specific category and type.
+- **Tempo and Looping Adjustments**: Adjusts playback rates based on the BPM and time signature of samples, enabling tempo synchronization for loops.
+- **Utility for Audio Management**: Functions for playing specific drum sounds (kick, snare, hi-hat, etc.) or loops (rhythm, melody).
+
+### Functions and Methods:
+1. **`barsBeatsToSeconds(bars, beats, bpm, beatsPerBar = 4)`**:
+   - Converts bars and beats to time in seconds based on the given BPM and beats per bar.
+   - Used for calculating the duration of a loop in time.
+
+2. **`getSample(category, type)`**:
+   - Retrieves a sample object based on its category (e.g., drum, loop) and type (e.g., kick, snare).
+   - Returns `null` if no matching sample is found.
+
+3. **`playSampleAtTime(category, type, time)`**:
+   - Plays a sample at a specific time within the audio context.
+   - Supports looping, trimming, and adjusting the volume and playback rate for the sample.
+   - Logs the sample’s start time for tracking.
+
+4. **`playSample(sample, globalBpm = null, startTime = null)`**:
+   - Plays a sample object with optional processing based on its properties.
+   - Supports BPM synchronization, looping, trimming, and adjusting playback rate.
+   - If `globalBpm` is provided, the sample’s playback rate is adjusted accordingly.
+
+5. **`playRandomSample(category, type, globalBpm = null, startTime = null)`**:
+   - Selects and plays a random sample from the specified category and type.
+   - If `globalBpm` is provided, the playback rate is adjusted to match it.
+
+6. **Example Functions for Playing Specific Samples**:
+   - **`playKick(globalBpm = null)`**: Plays a random kick sample.
+   - **`playSnare(globalBpm = null)`**: Plays a random snare sample.
+   - **`playHiHat(globalBpm = null)`**: Plays a random hi-hat sample.
+   - **`playRimshot(globalBpm = null)`**: Plays a random rimshot sample.
+   - **`playRhythmLoop(globalBpm = null)`**: Plays a random rhythm loop.
+   - **`playMelodyLoop(globalBpm = null)`**: Plays a random melody loop.
+
+### Important Information for Developers Importing This Module:
+- **Sample Management**: The module depends on the `samples` object, which contains a collection of sample data (e.g., kick, snare, melody loops). Developers can add or modify this collection to include their own samples.
+- **Tempo Control**: Playback speed is automatically adjusted based on the global BPM. This feature ensures that looped samples play in sync with the overall tempo.
+- **Trim and Looping**: The module supports trimming (cutting off portions of a sample) and looping, making it flexible for playing different parts of a sample repeatedly.
+- **Playback Time Scheduling**: Developers can specify when a sample should play by passing a `time` argument, which is relative to the `audioContext`'s current time.
+- **Sample Properties**: Each sample has properties like `playbackRate`, `volume`, `trimStart`, `trimEnd`, and `loop`, which control its playback behavior. These properties allow for detailed control over how each sample is played.
+- **Randomization**: The `playRandomSample` function ensures that each playthrough could potentially feature different variations of a sample, helping to create more dynamic compositions.
+
+### Dependencies:
+- **`samples` from `samples.js`**: Contains the sample data, which includes information about sample categories, types, and properties.
+- **`audioContext`, `masterGainNode`, `loadSample` from `audioLoader.js`**: These are essential for creating, processing, and controlling the audio playback.
+
+This module provides a powerful set of utilities for managing and playing samples within a music production or sequencing application, making it ideal for building beat-making tools, drum machines, or interactive sound applications.
+ */

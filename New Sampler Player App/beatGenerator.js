@@ -1,5 +1,5 @@
 // beatGenerator.js
-import { audioContext } from './audioLoader.js';
+import { audioContext, getGlobalStartTime } from './audioLoader.js';
 import { samples } from './samples.js';
 import { playSampleAtTime } from './player.js';
 import { patterns } from './patterns.js';
@@ -7,7 +7,7 @@ import { patterns } from './patterns.js';
 /**
  * Default configuration for the beat generator.
  */
-const defaultConfig = {
+export const defaultConfig = {
   bpm: 120,
   bars: 4,
   beatsPerBar: 4,
@@ -57,15 +57,35 @@ export class BeatGenerator {
     this.generatePatterns();
   }
 
+   /**
+   * Starts the Beat Generator.
+   */
+   start() {
+    if (this.isPlaying) return;
+    this.isPlaying = true;
+    console.log('BeatGenerator started.');
+  }
+
   /**
-   * Initializes tempo modifiers for instruments that have tempo variants.
+   * Stops the Beat Generator.
+   */
+  stop() {
+    if (!this.isPlaying) return;
+    this.isPlaying = false;
+    console.log('BeatGenerator stopped.');
+    // Implement any necessary cleanup here (e.g., cancel scheduled beats)
+  }
+
+
+  /**
+   * Initializes tempo modifiers for instruments based on their tempo variants.
    */
   initializeTempoModifiers() {
     this.tempoModifiers = {};
     for (const [instrument, settings] of Object.entries(this.config.instruments)) {
       if (settings.tempoVariants && settings.tempoVariants.length > 1) {
         this.tempoModifiers[instrument] = {
-          currentVariantIndex: 0, // Start with the first variant
+          currentVariantIndex: 0,
           stepsUntilChange: this.randomTempoChangeFrequency(),
         };
       }
@@ -73,13 +93,143 @@ export class BeatGenerator {
   }
 
   /**
-   * Generates a random frequency for tempo changes.
+   * Generates patterns for each instrument based on the current configuration.
+   * @param {boolean} isFill - Indicates if generating a fill pattern.
+   */
+  generatePatterns(isFill = false) {
+    this.generatedPatterns = {};
+    for (const [instrument, settings] of Object.entries(this.config.instruments)) {
+      if (!settings.enabled) continue;
+      const pattern = isFill
+        ? this.config.patterns.fillPatterns[instrument] || [0, 0, 0, 0]
+        : this.config.patterns.standardPatterns[instrument] || [0, 0, 0, 0];
+      this.generatedPatterns[instrument] = pattern;
+    }
+  }
+
+  /**
+   * Schedules a beat based on the generated patterns.
+   * @param {number} startTime - The time to start scheduling from.
+   */
+  scheduleBeat(startTime = null) {
+    if (startTime === null) {
+      const globalStartTime = getGlobalStartTime();
+      startTime = globalStartTime;
+    }
+    const { swing, fillProbability } = this.config;
+    const scheduledSounds = [];
+    const uniqueSamples = new Set();
+
+    // Log the start time of the beat
+    console.log(`Beat scheduled to start at audio time: ${startTime.toFixed(3)} seconds`);
+
+    // Keep track of cycles to trigger fills at specific times
+    if (this.cycleCount === undefined) {
+      this.cycleCount = 0;
+    }
+
+    // Decide when to play a fill (e.g., every 4 cycles)
+    const playFill = Math.random() < fillProbability && this.cycleCount % 4 === 3; // Play a fill based on probability and cycle count
+
+    // Generate fill patterns if needed
+    if (playFill) {
+      this.generatePatterns(true); // Generate fill patterns
+    } else {
+      this.generatePatterns(false); // Generate standard patterns
+    }
+
+    // Determine the maximum pattern length among all instruments
+    const maxPatternLength = Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
+
+    let firstBeatTimeLogged = false;
+
+    for (const [instrumentName, pattern] of Object.entries(this.generatedPatterns)) {
+      const stepDuration = (60 / this.config.bpm) / this.config.beatsPerBar;
+
+      for (let i = 0; i < pattern.length; i++) {
+        if (pattern[i] !== 1) continue;
+
+        let time = startTime + i * stepDuration;
+
+        // Apply swing to off-beats
+        const isOffBeat = (i % 2) !== 0;
+        if (swing > 0 && isOffBeat) {
+          time += stepDuration * swing;
+        }
+
+        // Log the time of the first beat
+        if (!firstBeatTimeLogged) {
+          console.log(`First beat scheduled at audio time: ${time.toFixed(3)} seconds`);
+          firstBeatTimeLogged = true;
+        }
+
+        const samplesList = getSamplesByType('drum', instrumentName);
+        if (samplesList.length > 0) {
+          const selectedSample = playRandomSampleAtTime(samplesList, time);
+          if (selectedSample) {
+            scheduledSounds.push({
+              instrument: instrumentName,
+              sample: selectedSample.type,
+              time: time.toFixed(3),
+            });
+            uniqueSamples.add(selectedSample.type);
+          }
+        }
+      }
+
+      // Update tempo modifiers for the instrument if not playing a fill
+      if (!playFill) {
+        const settings = this.config.instruments[instrumentName];
+        const modifier = this.tempoModifiers[instrumentName];
+        if (settings.tempoVariants && modifier) {
+          modifier.stepsUntilChange -= 1;
+          if (modifier.stepsUntilChange <= 0) {
+            modifier.currentVariantIndex = (modifier.currentVariantIndex + 1) % settings.tempoVariants.length;
+            modifier.stepsUntilChange = this.randomTempoChangeFrequency();
+            // Regenerate the patterns with the new tempo variant
+            this.generatePatterns();
+          }
+        }
+      }
+    }
+
+    // Increment cycle count after scheduling
+    this.cycleCount += 1;
+
+    // Condensed Log: List of unique samples used in this loop
+    if (uniqueSamples.size > 0) {
+      console.log('Samples Used:', Array.from(uniqueSamples).join(', '));
+    }
+
+    // Detailed Log: Selection of sounds for this beat
+    if (scheduledSounds.length > 0) {
+      console.log('Beat Update:', scheduledSounds);
+    }
+  }
+
+  /**
+   * Sets the loop duration based on active loops.
+   * @param {number} duration - The loop duration in seconds.
+   */
+  setLoopDuration(duration) {
+    this.loopDuration = duration;
+  }
+
+  /**
+   * Refreshes patterns, typically after settings changes.
+   */
+  refreshPatterns() {
+    this.generatePatterns(false);
+  }
+
+  /**
+   * Determines the frequency of tempo changes.
    * @returns {number} - Steps until the next tempo change.
    */
   randomTempoChangeFrequency() {
-    // Change tempo variant every 8 to 16 steps
-    return Math.floor(Math.random() * 9) + 8;
+    return Math.floor(Math.random() * 5) + 1; // Random between 1 and 5
   }
+
 
   /**
    * Generates patterns for each instrument based on the configuration.
@@ -176,115 +326,7 @@ export class BeatGenerator {
     return downsampledPattern;
   }
 
-  /**
-   * Schedules the beat based on the generated patterns.
-   * @param {number} startTime - The time to start scheduling from.
-   */
-  scheduleBeat(startTime = audioContext.currentTime + 0.1) {
-    const { swing, fillProbability } = this.config;
-    const scheduledSounds = [];
-    const uniqueSamples = new Set();
   
-    // Log the start time of the beat
-    console.log(`Beat scheduled to start at audio time: ${startTime.toFixed(3)} seconds`);
-  
-    // Keep track of cycles to trigger fills at specific times
-    if (this.cycleCount === undefined) {
-      this.cycleCount = 0;
-    }
-  
-    // Decide when to play a fill (e.g., every 4 cycles)
-    const playFill = this.cycleCount % 4 === 3; // Play a fill every 4 cycles (on the 4th)
-  
-    // Generate fill patterns if needed
-    if (playFill) {
-      this.generatePatterns(true); // Generate fill patterns
-    }
-  
-    // Determine the maximum pattern length among all instruments
-    const maxPatternLength = Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
-  
-    let firstBeatTimeLogged = false;
-  
-    for (const [instrumentName, pattern] of Object.entries(this.generatedPatterns)) {
-      const stepDuration = this.instrumentStepDurations[instrumentName];
-  
-      for (let i = 0; i < pattern.length; i++) {
-        if (pattern[i] !== 1) continue;
-  
-        let time = startTime + i * stepDuration;
-  
-        // Apply swing to off-beats
-        const isOffBeat = (i % 2) !== 0;
-        if (swing > 0 && isOffBeat) {
-          time += stepDuration * swing;
-        }
-  
-        // Log the time of the first beat
-        if (!firstBeatTimeLogged) {
-          console.log(`First beat scheduled at audio time: ${time.toFixed(3)} seconds`);
-          firstBeatTimeLogged = true;
-        }
-  
-        const samplesList = getSamplesByType('drum', instrumentName);
-        if (samplesList.length > 0) {
-          const selectedSample = playRandomSampleAtTime(samplesList, time);
-          if (selectedSample) {
-            scheduledSounds.push({
-              instrument: instrumentName,
-              sample: selectedSample.type,
-              time: time.toFixed(3),
-            });
-            uniqueSamples.add(selectedSample.type);
-          }
-        }
-      }
-  
-      // Update tempo modifiers for the instrument if not playing a fill
-      if (!playFill) {
-        const settings = this.config.instruments[instrumentName];
-        const modifier = this.tempoModifiers[instrumentName];
-        if (settings.tempoVariants && modifier) {
-          modifier.stepsUntilChange -= 1;
-          if (modifier.stepsUntilChange <= 0) {
-            modifier.currentVariantIndex = (modifier.currentVariantIndex + 1) % settings.tempoVariants.length;
-            modifier.stepsUntilChange = this.randomTempoChangeFrequency();
-            // Regenerate the patterns with the new tempo variant
-            this.generatePatterns();
-          }
-        }
-      }
-    }
-  
-    // Increment cycle count after scheduling
-    this.cycleCount += 1;
-  
-    // Condensed Log: List of unique samples used in this loop
-    if (uniqueSamples.size > 0) {
-      console.log('Samples Used:', Array.from(uniqueSamples).join(', '));
-    }
-  
-    // Detailed Log: Selection of sounds for this beat
-    if (scheduledSounds.length > 0) {
-      console.log('Beat Update:', scheduledSounds);
-    }
-  }
-
-  /**
-   * Returns the length of the pattern in steps.
-   * @returns {number} - The maximum pattern length.
-   */
-  getPatternLength() {
-    return Math.max(...Object.values(this.generatedPatterns).map((p) => p.length));
-  }
-
-  /**
-   * Refreshes the patterns, useful when configuration changes.
-   */
-  refreshPatterns() {
-    this.initializeTempoModifiers();
-    this.generatePatterns();
-  }
 }
 
 /**
@@ -322,3 +364,84 @@ const playRandomSampleAtTime = (sampleList, time) => {
   playSampleAtTime(sample.category, sample.type, time);
   return sample;
 };
+
+
+
+/** Beat Generator Module Dev Notes:
+ * 
+ * ### Summary of `beatGenerator.js`
+
+The `beatGenerator.js` file defines a **Beat Generator** class that can generate and schedule beat patterns for various instruments, with customization options for tempo, swing, and randomness. It is designed to integrate with other modules, such as `audioLoader.js`, `samples.js`, and `player.js`, to play the samples at specific times according to the generated patterns. The generator can be configured with default or user-defined settings, and it includes features like tempo variants for instruments, swing effects, and the ability to trigger fills at the end of cycles.
+
+### Key Features:
+- **Default Configuration**: Specifies the BPM, bars, beats per bar, instruments, and randomness settings.
+- **Dynamic Pattern Generation**: Can generate standard and fill patterns for each instrument based on the configuration.
+- **Tempo Modifiers**: Allows for dynamic tempo changes for instruments based on their tempo variants.
+- **Swing**: Applies a swing effect to off-beats.
+- **Randomization**: Includes probability-based randomization for instrument hits and pattern selection.
+- **Fill Generation**: Includes functionality to trigger fills at certain points based on a defined probability.
+- **Sample Selection**: Uses a function to pick random samples and play them at specific times.
+
+### Functions and Methods:
+1. **`mergeConfigs(userConfig = {})`**:
+   - Merges the default configuration with the user's custom configuration.
+   - Returns a merged configuration object.
+
+2. **`constructor(userConfig = {})`**:
+   - Initializes the BeatGenerator with a given configuration.
+   - Calls methods to set up tempo modifiers and generate patterns.
+
+3. **`start()`**:
+   - Starts the Beat Generator, enabling beat scheduling.
+   - Logs "BeatGenerator started."
+
+4. **`stop()`**:
+   - Stops the Beat Generator.
+   - Logs "BeatGenerator stopped" and cancels scheduled beats if needed.
+
+5. **`initializeTempoModifiers()`**:
+   - Initializes tempo modifiers for each instrument based on its tempo variants.
+
+6. **`generatePatterns(isFill = false)`**:
+   - Generates the beat patterns for each instrument.
+   - If `isFill` is `true`, it generates a fill pattern; otherwise, it generates the standard pattern.
+   - Handles pattern selection and downsampling.
+
+7. **`scheduleBeat(startTime = null)`**:
+   - Schedules beats based on the generated patterns.
+   - Takes into account swing, fill probability, and tempo changes.
+
+8. **`setLoopDuration(duration)`**:
+   - Sets the loop duration for the beat generator.
+
+9. **`refreshPatterns()`**:
+   - Refreshes the patterns, typically after configuration changes.
+
+10. **`randomTempoChangeFrequency()`**:
+    - Determines a random frequency for tempo changes, returning a value between 1 and 5.
+
+11. **`downsamplePattern(pattern, factor)`**:
+    - Downsamples a high-resolution pattern by a specified factor.
+
+12. **`getSamplesByType(category, type)`**:
+    - Retrieves a list of samples based on category and type.
+    - Filters through the imported `samples` array.
+
+13. **`playRandomSampleAtTime(sampleList, time)`**:
+    - Plays a random sample from a given list at a specific time.
+    - Calls `playSampleAtTime()` from the `player.js` module.
+
+### Framework/Import Details:
+- **`audioContext` and `getGlobalStartTime`** from `audioLoader.js`: Used to manage audio playback and track the global start time for scheduling beats.
+- **`samples` from `samples.js`**: Contains the available audio samples for different instruments, which are selected randomly during beat generation.
+- **`playSampleAtTime` from `player.js`**: Handles the actual playback of samples at the scheduled time.
+- **`patterns` from `patterns.js`**: Provides the standard and fill patterns used by the Beat Generator to construct the beat sequences.
+
+### Important Information for Developers Importing This Module:
+- **Customization**: The module allows users to define custom configurations for beats, including BPM, swing, and instrument-specific settings.
+- **Dependencies**: This module relies on the `audioLoader.js`, `samples.js`, and `player.js` modules for managing audio context and playing samples.
+- **Randomization Features**: There are various randomization settings available, such as pattern selection and hit variation, which help generate dynamic and varied beats.
+- **Instruments**: It supports multiple instruments (kick, snare, hihat, etc.), each with its own probability of being played and tempo variants for different playback speeds.
+- **Fill Patterns**: The module includes logic for triggering fill patterns at the end of a cycle, with a configurable probability.
+
+ */

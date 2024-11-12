@@ -220,3 +220,90 @@ export const samples = [
   },
   // Additional samples can follow the same structure
 ];
+
+/** Dev notes for samples.js
+ * ### Summary of `samples.js`
+
+The `samples.js` file defines an array of **sample objects** used for audio playback in a music application. These samples cover a range of categories, including drums, loops, and sound effects, and each sample has properties that control its playback, such as volume, playback rate, looping, and trimming. This module provides a central place to manage and retrieve audio samples used throughout the application.
+
+### Key Features:
+- **Sample Definitions**: Each sample is an object containing metadata like `id`, `name`, `category`, `type`, and audio-specific properties like `volume`, `playbackRate`, and `loopPoints`.
+- **Categories and Types**: The samples are categorized (e.g., `drum`, `percussionLoop`, `melodicLoop`, `sfx`), and each category can contain multiple types (e.g., `kick`, `snare`, `hihat`).
+- **Looping and Trim Settings**: Some samples are defined as loops (`loop: true`), with properties to control the trimming of the sample (e.g., `trimStart`, `trimEnd`).
+- **Tempo and Key Information**: Some loop samples include tempo (`bpm`) and key (`key`), which help synchronize the samples with the global tempo and key of the composition.
+- **User Notes and Descriptions**: Each sample can include user notes and a description, providing additional context for its use or characteristics.
+
+### Sample Objects:
+Each sample object has the following structure:
+- **`id`**: A unique identifier for the sample.
+- **`name`**: The name of the sample.
+- **`url`**: The URL where the audio file is located.
+- **`category`**: The category of the sample (e.g., `drum`, `melodicLoop`, `percussionLoop`, `sfx`).
+- **`type`**: The specific type of the sample within the category (e.g., `kick`, `snare`, `hihat`, `rhythm`, `melody`).
+- **`properties`**: An object that defines playback properties like:
+  - **`loop`**: Whether the sample should loop (true or false).
+  - **`trim`**: Whether the sample should be trimmed (true or false).
+  - **`trimStart`**: The start point for trimming the sample (in seconds).
+  - **`trimEnd`**: The end point for trimming the sample (in seconds).
+  - **`volume`**: The volume of the sample (default is 1.0).
+  - **`playbackRate`**: The speed of playback (default is 1.0).
+  - **`loopPoints`**: Defines where the loop starts and ends (in bars and beats).
+  - **`bpm`**: The tempo of the sample (in beats per minute), typically used for loops.
+  - **`key`**: The musical key of the sample (e.g., `D Minor`, `G Major`).
+
+### Sample Examples:
+1. **Kick Drum** (`kick1`):
+   - **Category**: `drum`
+   - **Type**: `kick`
+   - **Description**: A deep kick drum suitable for hip-hop beats.
+   - **Properties**: Non-looping, no trimming, volume at 1.0, playback rate at 1.0.
+
+2. **Rimshot** (`rimshot1`):
+   - **Category**: `drum`
+   - **Type**: `rimshot`
+   - **Properties**: Non-looping, no trimming, volume at 1.0, playback rate at 1.0.
+
+3. **Floor Tom** (`floortom1` and `floortom2`):
+   - **Category**: `drum`
+   - **Type**: `floortom`
+   - **Properties**: Non-looping, no trimming, volume at 1.0, playback rate at 1.0.
+
+4. **Hi-Hat** (`hihat1`):
+   - **Category**: `drum`
+   - **Type**: `hihat`
+   - **Properties**: Non-looping, trimming applied (`trimStart: 0.05`, `trimEnd: 0.02`), volume at 0.8, playback rate at 1.0.
+
+5. **Amen Break Rhythm Loop** (`rhythmLoop1`):
+   - **Category**: `percussionLoop`
+   - **Type**: `rhythm`
+   - **Properties**: Looping, 4 bars long, tempo at 138 BPM, volume at 1.0, playback rate at 0.33.
+
+6. **Melody Loop** (`melodyLoop1`):
+   - **Category**: `melodicLoop`
+   - **Type**: `melody`
+   - **Properties**: Looping, 2 bars long, tempo at 80 BPM, volume at 1.0, playback rate at 1.0.
+
+7. **Dog Bark** (`dogBark1`):
+   - **Category**: `sfx`
+   - **Type**: `instrument`
+   - **Properties**: Non-looping, no trimming, volume at 1.0, playback rate at 1.0.
+
+8. **Fast Melody Loop** (`loop1`):
+   - **Category**: `melodicLoop`
+   - **Type**: `melody`
+   - **Properties**: Looping, trim settings not applied, playback rate at 0.33 (slowed down), BPM set to 120.
+
+### Key Features:
+- **Sample Metadata**: Each sample includes metadata like `description`, `note`, and `userNotes`, which provide additional context on how to use the sample.
+- **Flexible Playback**: Each sample has properties that allow it to be played with specific settings like trimming, volume, playback rate, and looping.
+- **Diverse Categories**: The samples are organized into categories such as `drum`, `percussionLoop`, `melodicLoop`, and `sfx`, making it easy to manage and retrieve different types of sounds.
+- **Tempo and Key**: Loops include information about the tempo (BPM) and key, ensuring they can be synchronized with other elements in the composition.
+
+### Important Information for Developers Importing This Module:
+- **Sample Access**: Samples are accessed via their `id`, and developers can filter by `category` and `type` to find the sample they need.
+- **Playback Customization**: Each sample includes customizable properties such as `loop`, `trimStart`, `trimEnd`, `volume`, and `playbackRate`, allowing developers to fine-tune the playback behavior.
+- **Looping and Timing**: Loops have specific properties like `loopPoints` and `bpm` that can be used for accurate timing and seamless looping.
+- **Extensibility**: More samples can be added to the array following the same structure, allowing easy expansion of the sample library.
+
+This module is ideal for music or sound-related applications where users need to access and play a variety of pre-defined audio samples, such as drum hits, loops, and sound effects. It provides all the necessary properties to manage audio samples and customize their playback.
+ */

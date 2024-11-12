@@ -162,3 +162,60 @@ export const patterns = {
     ],
     // Additional instruments and patterns can be added here
   };
+
+  /** Dev notes for patterns.js
+   * ### Summary of `patterns.js`
+
+The `patterns.js` file defines a collection of **drum patterns** for various percussion instruments, such as kick, snare, hi-hat, and toms. These patterns are arrays representing the sequence of beats that each instrument will play over a set period, typically one bar or one cycle of music. Each instrument has a series of predefined patterns that can be used in music composition or beat generation, along with additional fill patterns for variation.
+
+### Key Features:
+- **Instrument Patterns**: Defines a set of patterns for each instrument (kick, snare, hi-hat, etc.) to be used in the beat generation.
+- **Fill Patterns**: Each instrument also has a corresponding set of fill patterns that add dynamic variations to the main patterns.
+- **High-Resolution and Low-Resolution Patterns**: Some patterns are high-resolution (e.g., 16th notes or 32nd notes), allowing for more intricate timing and detail in rhythm.
+- **Grooves and Styles**: Various patterns represent different musical genres, such as funk, jazz, Latin, hip-hop, and drum and bass.
+
+### Patterns for Each Instrument:
+1. **Kick Patterns (`kick`)**:
+   - A series of patterns for the kick drum, including common patterns like **Four-on-the-floor**, **Rock Beat**, **Funk Groove**, and **Drum and Bass Pattern**.
+   - Includes both low-resolution patterns (e.g., quarter notes) and high-resolution patterns (e.g., 32nd notes).
+
+2. **Snare Patterns (`snare`)**:
+   - A variety of snare drum patterns, including the **Standard Backbeat**, **Syncopated Snare**, **Funk Snare**, and **Reggae Snare**.
+   - Contains high-resolution patterns and fills for different styles.
+
+3. **Hi-Hat Patterns (`hihat`)**:
+   - Includes standard hi-hat patterns like **16th-note patterns**, **Triplet Feel**, **Swing Pattern**, and **Off-beat Hi-Hat**.
+   - There are additional variations like the **Jazz Ride Pattern** and **Open Hi-Hat on "And" of 4**.
+
+4. **Rimshot Patterns (`rimshot`)**:
+   - Simple rimshot patterns like **Simple Rimshot Patterns** and **Syncopated Rimshot**.
+   - Also includes high-resolution rimshot patterns for faster rhythms.
+
+5. **Floor Tom Patterns (`floortom`)**:
+   - Includes patterns like **Tom Groove**, **Tom Fill at the End of the Bar**, and **Extended Tom Pattern**.
+
+6. **High Tom Patterns (`hightom`)**:
+   - Includes patterns like **Tom Hits on 1 and 3**, **Syncopated Tom Pattern**, and **Tom Roll**.
+
+7. **Fill Patterns**: 
+   - Each instrument also has corresponding fill patterns (e.g., `kick_fills`, `snare_fills`, etc.), which can be triggered to add variation or transitions during beat generation. These fills range from simple variations to complex rolls with varying resolutions (16th or 32nd notes).
+
+### Key Elements:
+- **Resolution**: Some patterns have higher resolution (e.g., 32nd notes), which allows for more intricate rhythms. These can be used for fast or syncopated beats.
+- **Grooves**: Many of the patterns represent specific musical styles, like **Funk Groove**, **Latin Groove**, **Hip-Hop Pattern**, and **Drum and Bass Pattern**, each of which offers distinct rhythmic feels.
+- **Versatility**: The patterns can be used in various compositions, offering flexibility for different music genres or styles.
+
+### Additional Features:
+- **Expandable**: More patterns can be added to each instrument or as new instruments are introduced.
+- **Fills**: The fill patterns provide dynamic variations, often used to transition between sections of a song or break up repetitive rhythms.
+- **Syncopation**: Several patterns incorporate syncopated rhythms, which are characteristic of genres like funk, jazz, and Latin music.
+
+### Important Information for Developers Importing This Module:
+- **Instrument Patterns**: Developers can access the predefined patterns for each instrument (kick, snare, hi-hat, etc.) to be used in a **beat generator** or any other rhythmic audio application.
+- **Pattern Selection**: The patterns for each instrument are stored in arrays. Developers can randomly select or iterate through these patterns to generate varied beats.
+- **Fill Variations**: The fill patterns for each instrument can be used to add dynamic transitions and variations within a beat sequence.
+- **Extensibility**: New patterns can be added as needed, whether for new genres, tempos, or specific musical styles.
+- **Tempo Compatibility**: Patterns are designed to work within a standard 4/4 time signature but can be adapted to different time signatures or subdivided for more complex rhythms (e.g., triplets, 32nd notes).
+  
+This module is ideal for applications requiring randomized or pattern-based drum sequencing, such as a drum machine, beat generator, or interactive music composition tool.
+   */
