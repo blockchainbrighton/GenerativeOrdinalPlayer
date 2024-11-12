@@ -307,3 +307,38 @@ Each sample object has the following structure:
 
 This module is ideal for music or sound-related applications where users need to access and play a variety of pre-defined audio samples, such as drum hits, loops, and sound effects. It provides all the necessary properties to manage audio samples and customize their playback.
  */
+
+
+
+/** ### Condensed Version for AI Assistant (samples.js)
+
+**`samples.js` Summary:**
+Defines an array of **sample objects** used for audio playback in music applications. Organizes samples into categories (e.g., drums, loops, sfx) with metadata controlling playback properties like volume, tempo, looping, and trimming.
+
+**Key Features:**
+- **Sample Definitions**: Each sample has properties like `id`, `name`, `category`, `type`, `volume`, `playbackRate`, and `loopPoints`.
+- **Categories & Types**: Samples are categorized (e.g., `drum`, `percussionLoop`, `melodicLoop`, `sfx`).
+- **Looping & Trim Settings**: Supports loop (`loop: true`), trim (`trimStart`, `trimEnd`), and tempo/key for loops.
+- **Tempo & Key Info**: Some samples include `bpm` and `key` for synchronization.
+
+**Sample Object Structure:**
+- **`id`**: Unique sample identifier.
+- **`name`**: Name of the sample.
+- **`url`**: URL of the audio file.
+- **`category`**: Category (e.g., `drum`, `melodicLoop`).
+- **`type`**: Specific sample type (e.g., `kick`, `snare`).
+- **`properties`**: Playback properties like `loop`, `trim`, `volume`, `playbackRate`, `loopPoints`, `bpm`, `key`.
+
+**Sample Examples:**
+1. **Kick Drum**: Non-looping, volume 1.0, no trimming.
+2. **Hi-Hat**: Non-looping, trimmed (`trimStart: 0.05`, `trimEnd: 0.02`), volume 0.8.
+3. **Rhythm Loop**: Looping, tempo 138 BPM, volume 1.0, playback rate 0.33.
+4. **Melody Loop**: Looping, tempo 80 BPM, volume 1.0.
+
+**Developer Notes:**
+- **Sample Access**: Accessed by `id`; filter by `category` and `type`.
+- **Playback Customization**: Customizable properties (`loop`, `trim`, `volume`, `playbackRate`).
+- **Looping & Timing**: Loops have `loopPoints` and `bpm` for accurate synchronization.
+- **Extensibility**: Add more samples following the same structure.
+
+This module is designed for managing and customizing a variety of audio samples, ideal for music or sound-related applications where playback control and sample organization are needed. */

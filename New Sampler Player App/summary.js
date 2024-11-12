@@ -103,3 +103,36 @@ Integration: The module can be imported into other parts of the application to a
 Custom Extensions: Developers can extend this module to provide additional summary data or modify the structure of the summary as needed.
 
  */
+
+
+
+/** ### Condensed Version for AI Assistant (summary.js)
+
+**`summary.js` Summary:**
+Processes and organizes audio samples into a structured summary, categorizing them by type and instrument. The generated summary is used for managing samples and generating UI elements.
+
+**Key Features:**
+- **Generates Summary**: Creates an object containing:
+  - Total sample count.
+  - Unique sample categories (e.g., drum, melodicLoop, sfx).
+  - Types within each category (e.g., kick, snare, hihat).
+  - Instruments grouped by category.
+- **Automatic Summary Generation**: Summary is generated upon importing the module and logged to the console.
+- **Exports Summary**: The `summaryData` object is exported for use in other modules.
+
+**Core Functionality:**
+- **`generateSummary()`**:
+  - Loops through `samples` array, extracting categories, types, and instruments.
+  - Returns an object with:
+    - `totalSamples`: Total count of samples.
+    - `categories`: List of unique categories.
+    - `types`: List of unique types within categories.
+    - `instrumentsByCategory`: Instruments grouped by category.
+
+- **Logging**: Logs summary data, including sample count, categories, instruments, and types.
+
+**Developer Notes:**
+- **Usage**: Can be imported for generating UI elements or processing samples based on their categories.
+- **Customization**: Can be extended for additional summary data or modified as needed.
+
+This module provides an organized view of the sample library, essential for dynamically generating UI, managing samples, and performing statistical analysis. */
